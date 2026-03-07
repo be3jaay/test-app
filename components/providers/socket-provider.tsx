@@ -129,6 +129,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
+    socket.on("job_cancelled", (data: { jobId: string; title?: string }) => {
+      toast.warning(`The client cancelled the request${data.title ? `: ${data.title}` : ""}.`, {
+        duration: 8000,
+      });
+    });
+
     socket.on("new_job_request", (data: { jobId: string; title?: string; category?: string }) => {
       toast.info(`New job request: ${data.title || data.category || "Service request"}`, {
         action: {

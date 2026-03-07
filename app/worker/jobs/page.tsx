@@ -38,6 +38,7 @@ const statusColor: Record<string, string> = {
   WorkDone: "bg-green-100 text-green-700",
   ClientConfirmed: "bg-green-100 text-green-700",
   Completed: "bg-green-100 text-green-700",
+  Cancelled: "bg-red-100 text-red-700",
 }
 
 const statusLabel: Record<string, string> = {
@@ -49,6 +50,7 @@ const statusLabel: Record<string, string> = {
   WorkDone: "Work done",
   ClientConfirmed: "Confirmed",
   Completed: "Completed",
+  Cancelled: "Cancelled",
 }
 
 export default function WorkerJobsPage() {

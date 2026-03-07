@@ -7,7 +7,7 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
 import { toast } from "sonner"
-import { Loader2, ArrowLeft, MessageCircle, CheckCircle } from "lucide-react"
+import { Loader2, ArrowLeft, MessageCircle, CheckCircle, XCircle } from "lucide-react"
 import Link from "next/link"
 
 type Job = {
@@ -31,6 +31,7 @@ const statusLabel: Record<string, string> = {
   ClientConfirmed: "Confirmed",
   Completed: "Completed",
   Declined: "Declined",
+  Cancelled: "Cancelled",
 }
 
 export default function ClientJobDetailPage() {
@@ -40,6 +41,7 @@ export default function ClientJobDetailPage() {
   const [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   const fetchJob = () => {
     if (!params.id) return
@@ -55,6 +57,20 @@ export default function ClientJobDetailPage() {
     const interval = setInterval(fetchJob, 10000)
     return () => clearInterval(interval)
   }, [isAuthenticated, params.id])
+
+  const handleCancel = async () => {
+    if (!job) return
+    setCancelling(true)
+    try {
+      await ApiService.patch(`/jobs/${job._id}/cancel`, {})
+      toast.success("Request cancelled")
+      setJob({ ...job, status: "Cancelled" })
+    } catch {
+      toast.error("Failed to cancel request")
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const handleConfirm = async () => {
     if (!job) return
@@ -157,6 +173,22 @@ export default function ClientJobDetailPage() {
                   <CheckCircle className="h-4 w-4 mr-2" />
                 )}
                 Confirm Done
+              </Button>
+            )}
+
+            {(job.status === "Pending" || job.status === "Accepted") && (
+              <Button
+                variant="destructive"
+                className="flex-1 rounded-xl"
+                onClick={handleCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <XCircle className="h-4 w-4 mr-2" />
+                )}
+                Cancel Request
               </Button>
             )}
           </div>

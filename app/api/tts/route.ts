@@ -2,14 +2,10 @@ import { NextResponse } from 'next/server'
 
 const INWORLD_TTS_API = process.env.INWORLD_TTS_API_URL || 'https://api.inworld.ai/tts/v1/voice'
 
+const INWORLD_TTS_API_KEY = 'YU1QdDd5aGRDUWhuRWdmMjlCcGhtYmczdVlkcTNTbHE6M1RneEh6T29wMHFlZHM0N0ZGcXUzZGp4SFZCUllrZ1ZPQmJuWTJXY0syRVFGWjBmYXFaYmdFVUx0cGg4QjM3UQ=='
+
 export async function POST(request: Request) {
-    const apiKey = process.env.INWORLD_TTS_API_KEY
-    if (!apiKey) {
-        return NextResponse.json(
-            { error: 'TTS API key not configured (INWORLD_TTS_API_KEY)' },
-            { status: 500 }
-        )
-    }
+    const apiKey = INWORLD_TTS_API_KEY
 
     let body: { text?: string }
     try {

@@ -18,6 +18,7 @@ import {
   Search,
   MessageCircle,
   Loader2,
+  XCircle,
 } from "lucide-react"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { ChatbotVoiceAgent } from "@/components/chatbot-voice-agent"
@@ -42,6 +43,7 @@ const statusLabel: Record<string, string> = {
   ClientConfirmed: "Confirmed",
   Completed: "Completed",
   Declined: "Declined",
+  Cancelled: "Cancelled",
 }
 
 const statusColor: Record<string, string> = {
@@ -54,6 +56,7 @@ const statusColor: Record<string, string> = {
   ClientConfirmed: "bg-green-100 text-green-700",
   Completed: "bg-green-100 text-green-700",
   Declined: "bg-red-100 text-red-700",
+  Cancelled: "bg-red-100 text-red-700",
 }
 
 export default function ClientDashboardPage() {
@@ -63,6 +66,7 @@ export default function ClientDashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const prevPendingIds = useRef<Set<string>>(new Set())
+  const [cancelling, setCancelling] = useState<string | null>(null)
   const [chatbotOpen, setChatbotOpen] = useState(false)
   const [wakeStatus, setWakeStatus] = useState<'idle' | 'listening' | 'blocked' | 'unsupported'>('idle')
   const wakeRecognitionRef = useRef<any>(null)
@@ -165,6 +169,21 @@ export default function ClientDashboardPage() {
     }
   }, [chatbotOpen])
 
+  const handleCancel = async (jobId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCancelling(jobId)
+    try {
+      await ApiService.patch(`/jobs/${jobId}/cancel`, {})
+      toast.success("Request cancelled")
+      setJobs((prev) => prev.map((j) => j._id === jobId ? { ...j, status: "Cancelled" } : j))
+    } catch {
+      toast.error("Failed to cancel request")
+    } finally {
+      setCancelling(null)
+    }
+  }
+
   const fetchJobs = () => {
     ApiService.getArray<Job>("/jobs/client")
       .then((newJobs) => {
@@ -212,7 +231,7 @@ export default function ClientDashboardPage() {
   }
 
   const activeJobs = jobs.filter(
-    (j) => !["Completed", "Declined", "ClientConfirmed"].includes(j.status)
+    (j) => !["Completed", "Declined", "ClientConfirmed", "Cancelled"].includes(j.status)
   )
   const recentJobs = jobs.filter((j) =>
     ["Completed", "ClientConfirmed"].includes(j.status)
@@ -292,12 +311,28 @@ export default function ClientDashboardPage() {
                       {job.category && (
                         <p className="text-xs text-muted-foreground">{job.category}</p>
                       )}
-                      {!isPending && (
-                        <span className="text-xs text-primary flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3" />
-                          {workerName ? `Chat with ${workerName}` : "Open chat"}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {!isPending && (
+                          <span className="text-xs text-primary flex items-center gap-1">
+                            <MessageCircle className="h-3 w-3" />
+                            {workerName ? `Chat with ${workerName}` : "Open chat"}
+                          </span>
+                        )}
+                        {(job.status === "Pending" || job.status === "Accepted") && (
+                          <button
+                            onClick={(e) => handleCancel(job._id, e)}
+                            disabled={cancelling === job._id}
+                            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5"
+                          >
+                            {cancelling === job._id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Link>
