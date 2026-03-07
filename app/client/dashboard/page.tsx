@@ -19,6 +19,8 @@ import {
   MessageCircle,
   Loader2,
 } from "lucide-react"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { ChatbotVoiceAgent } from "@/components/chatbot-voice-agent"
 
 type Job = {
   _id: string
@@ -61,6 +63,107 @@ export default function ClientDashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const prevPendingIds = useRef<Set<string>>(new Set())
+  const [chatbotOpen, setChatbotOpen] = useState(false)
+  const [wakeStatus, setWakeStatus] = useState<'idle' | 'listening' | 'blocked' | 'unsupported'>('idle')
+  const wakeRecognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    const shouldOpenVoiceSheet = window.localStorage.getItem('denki_v') === 'true'
+    if (shouldOpenVoiceSheet) {
+      setChatbotOpen(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setWakeStatus('unsupported')
+      return
+    }
+
+    if (chatbotOpen) {
+      wakeRecognitionRef.current?.stop()
+      setWakeStatus('idle')
+      return
+    }
+
+    let cancelled = false
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onresult = (event: any) => {
+      let transcript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+
+      if (/\bdenki\b/i.test(transcript)) {
+        setChatbotOpen(true)
+      }
+    }
+
+    recognition.onerror = (event: any) => {
+      if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+        setWakeStatus('blocked')
+        return
+      }
+
+      if (cancelled || chatbotOpen) return
+
+      setTimeout(() => {
+        try {
+          recognition.start()
+          setWakeStatus('listening')
+        } catch {
+          // Retry is best-effort; browser may still be settling.
+        }
+      }, 500)
+    }
+
+    recognition.onend = () => {
+      if (cancelled || chatbotOpen) return
+      try {
+        recognition.start()
+        setWakeStatus('listening')
+      } catch {
+        // Avoid crashing if the browser rejects rapid restarts.
+      }
+    }
+
+    wakeRecognitionRef.current = recognition
+
+    const startWakeListener = async () => {
+      try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach((track) => track.stop())
+        }
+      } catch {
+        setWakeStatus('blocked')
+        return
+      }
+
+      if (cancelled || chatbotOpen) return
+
+      try {
+        recognition.start()
+        setWakeStatus('listening')
+      } catch {
+        // Ignore duplicate start errors while browser state settles.
+      }
+    }
+
+    void startWakeListener()
+
+    return () => {
+      cancelled = true
+      recognition.stop()
+    }
+  }, [chatbotOpen])
 
   const fetchJobs = () => {
     ApiService.getArray<Job>("/jobs/client")
@@ -89,7 +192,7 @@ export default function ClientDashboardPage() {
           newJobs.filter((j) => j.status === "Pending").map((j) => j._id)
         )
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false))
   }
 
@@ -204,6 +307,31 @@ export default function ClientDashboardPage() {
         )}
       </section>
 
+      <div className="fixed bottom-6 right-6 z-40">
+        <Sheet open={chatbotOpen} onOpenChange={(open) => open && setChatbotOpen(true)}>
+          <Button
+            size="lg"
+            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl"
+            onClick={() => setChatbotOpen(true)}
+          >
+            <MessageCircle className="w-6 h-6" />
+          </Button>
+          <SheetContent
+            side="right"
+            className="w-full p-0 data-[state=open]:duration-700 data-[state=closed]:duration-400 data-[state=open]:ease-out"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+          >
+            <ChatbotVoiceAgent onClose={() => setChatbotOpen(false)} />
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {wakeStatus !== 'idle' && (
+        <div className="fixed bottom-2 right-6 z-30 text-xs text-muted-foreground">
+          Wake listener: {wakeStatus}
+        </div>
+      )}
       <section>
         <h2 className="font-semibold flex items-center gap-2 mb-3">
           <CheckCircle className="h-4 w-4 text-green-600" />

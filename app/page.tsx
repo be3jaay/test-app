@@ -1,197 +1,380 @@
-import { Button } from "@/components/ui/button"
+"use client"
+
+import { useRequireAuth } from "@/components/providers/auth-provider"
+import { useAuth } from "@/components/providers/auth-provider"
+import { TRole } from "@/services/auth/types"
 import { KitaLogo } from "@/components/kita-logo"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import ApiService from "@/services/api-services"
+import { toast } from "sonner"
 import {
-  Zap,
-  Shield,
   Clock,
-  Users,
-  Bot,
-  Wrench,
-  Droplets,
-  Paintbrush,
-  Sparkles,
-  ArrowRight,
-  Star,
   CheckCircle,
+  ArrowRight,
+  Search,
+  Loader2,
 } from "lucide-react"
+import { AvailableWorker, mockAvailableWorkers, mockClientProfile, mockCompletedServices, mockServiceRequests, ServiceRequest } from '@/lib/mock-data'
+import { useState, useEffect, useRef } from 'react'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { MessageCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ChatbotVoiceAgent } from '@/components/chatbot-voice-agent'
 
-const services = [
-  { name: "Electrician", icon: Zap, color: "bg-yellow-50 text-yellow-600" },
-  { name: "Plumber", icon: Droplets, color: "bg-blue-50 text-blue-600" },
-  { name: "Painter", icon: Paintbrush, color: "bg-purple-50 text-purple-600" },
-  { name: "Handyman", icon: Wrench, color: "bg-orange-50 text-orange-600" },
-  { name: "Cleaning", icon: Sparkles, color: "bg-green-50 text-green-600" },
-  { name: "And more", icon: ArrowRight, color: "bg-muted text-muted-foreground" },
-]
+type Job = {
+  _id: string
+  title?: string
+  description: string
+  category?: string
+  status: string
+  workerId?: { name?: string; _id?: string } | string | null
+  createdAt: string
+}
 
-const steps = [
-  { step: "1", title: "Describe your problem", desc: "Tell Denki what you need, by voice or text" },
-  { step: "2", title: "Get matched instantly", desc: "Our AI finds the right professional for you" },
-  { step: "3", title: "Job done, guaranteed", desc: "Track progress, chat, and pay securely" },
-]
+const statusLabel: Record<string, string> = {
+  Pending: "Pending",
+  Accepted: "Accepted",
+  OnTheWay: "On the way",
+  Arrived: "Worker arrived",
+  InProgress: "In progress",
+  WorkDone: "Work done",
+  ClientConfirmed: "Confirmed",
+  Completed: "Completed",
+  Declined: "Declined",
+}
+export default function ClientDashboard() {
+  const [client] = useState(mockClientProfile)
+  const [workers, setWorkers] = useState<AvailableWorker[]>(mockAvailableWorkers)
+  const [selectedWorker, setSelectedWorker] = useState<AvailableWorker | null>(null)
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>(mockServiceRequests)
+  const [ratingModalOpen, setRatingModalOpen] = useState(false)
+  const [completedServices, setCompletedServices] = useState(mockCompletedServices)
+  const [chatbotOpen, setChatbotOpen] = useState(false)
+  const wakeRecognitionRef = useRef<any>(null)
+  const [wakeStatus, setWakeStatus] = useState<'idle' | 'listening' | 'blocked' | 'unsupported'>('idle')
+  const { isAuthenticated, isLoading } = useRequireAuth([TRole.CLIENT])
+  const { logout } = useAuth()
+  const router = useRouter()
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
+  const prevPendingIds = useRef<Set<string>>(new Set())
 
-export default function LandingPage() {
+  useEffect(() => {
+    const shouldOpenVoiceSheet = window.localStorage.getItem('denki_v') === 'true'
+    if (shouldOpenVoiceSheet) {
+      setChatbotOpen(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setWakeStatus('unsupported')
+      return
+    }
+
+    if (chatbotOpen) {
+      wakeRecognitionRef.current?.stop()
+      setWakeStatus('idle')
+      return
+    }
+
+    let cancelled = false
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onresult = (event: any) => {
+      let transcript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+
+      if (/\bdenki\b/i.test(transcript)) {
+        setChatbotOpen(true)
+      }
+    }
+
+    recognition.onerror = (event: any) => {
+      if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+        setWakeStatus('blocked')
+        return
+      }
+
+      if (cancelled || chatbotOpen) return
+
+      setTimeout(() => {
+        try {
+          recognition.start()
+          setWakeStatus('listening')
+        } catch {
+          // Retry is best-effort; browser may still be settling.
+        }
+      }, 500)
+    }
+
+    recognition.onend = () => {
+      if (cancelled || chatbotOpen) return
+      try {
+        recognition.start()
+        setWakeStatus('listening')
+      } catch {
+        // Avoid crashing if the browser rejects rapid restarts.
+      }
+    }
+
+    wakeRecognitionRef.current = recognition
+
+    const startWakeListener = async () => {
+      try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach((track) => track.stop())
+        }
+      } catch {
+        setWakeStatus('blocked')
+        return
+      }
+
+      if (cancelled || chatbotOpen) return
+
+      try {
+        recognition.start()
+        setWakeStatus('listening')
+      } catch {
+        // Ignore duplicate start errors while browser state settles.
+      }
+    }
+
+    void startWakeListener()
+
+    return () => {
+      cancelled = true
+      recognition.stop()
+    }
+  }, [chatbotOpen])
+
+  const statusColor: Record<string, string> = {
+    Pending: "bg-yellow-100 text-yellow-700",
+    Accepted: "bg-blue-100 text-blue-700",
+    OnTheWay: "bg-blue-100 text-blue-700",
+    Arrived: "bg-blue-100 text-blue-700",
+    InProgress: "bg-purple-100 text-purple-700",
+    WorkDone: "bg-green-100 text-green-700",
+    ClientConfirmed: "bg-green-100 text-green-700",
+    Completed: "bg-green-100 text-green-700",
+    Declined: "bg-red-100 text-red-700",
+  }
+
+
+  const fetchJobs = () => {
+    ApiService.getArray<Job>("/jobs/client")
+      .then((newJobs) => {
+        setJobs(newJobs)
+
+        newJobs.forEach((job) => {
+          if (
+            prevPendingIds.current.has(job._id) &&
+            job.status === "Accepted"
+          ) {
+            const workerName =
+              typeof job.workerId === "object" && job.workerId?.name
+                ? job.workerId.name
+                : "A worker"
+            toast.success(`${workerName} accepted your request!`, {
+              action: {
+                label: "Open Chat",
+                onClick: () => router.push(`/client/chats/${job._id}`),
+              },
+            })
+          }
+        })
+
+        prevPendingIds.current = new Set(
+          newJobs.filter((j) => j.status === "Pending").map((j) => j._id)
+        )
+      })
+      .catch(() => { })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    fetchJobs()
+    const interval = setInterval(fetchJobs, 10000)
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  const activeJobs = jobs.filter(
+    (j) => !["Completed", "Declined", "ClientConfirmed"].includes(j.status)
+  )
+  const recentJobs = jobs.filter((j) =>
+    ["Completed", "ClientConfirmed"].includes(j.status)
+  )
+
   return (
-    <div className="min-h-svh bg-background">
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
-        <div className="relative max-w-lg mx-auto px-6 pt-16 pb-12 text-center">
-          {/* Logo */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
-            <KitaLogo className="h-5 w-5" />
-            Powered by Denki AI
-          </div>
-
-          <h1 className="text-4xl font-extrabold tracking-tight leading-[1.15] mb-4">
-            Every service you need,{" "}
-            <span className="text-primary">one tap away</span>
-          </h1>
-
-          <p className="text-muted-foreground leading-relaxed mb-8 max-w-sm mx-auto">
-            Kita is the marketplace where you find any skilled professional near you.
-            Our AI assistant Denki handles the rest — from matching to booking.
-          </p>
-
-          <div className="flex flex-col gap-3 max-w-xs mx-auto">
-            <Link href="/register">
-              <Button size="lg" className="w-full h-13 text-base font-semibold rounded-2xl shadow-lg shadow-primary/20">
-                Get Started
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button variant="ghost" size="lg" className="w-full h-13 text-base rounded-2xl">
-                I already have an account
-              </Button>
-            </Link>
-          </div>
+    <div className="max-w-lg mx-auto px-4 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <KitaLogo className="h-8 w-8" />
+          <span className="font-bold text-lg">Kita</span>
         </div>
-      </section>
+        <button onClick={logout} className="text-sm text-muted-foreground">
+          Log out
+        </button>
+      </div>
 
-      {/* Services Grid */}
-      <section className="max-w-lg mx-auto px-6 py-10">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Popular services</p>
-        <div className="grid grid-cols-3 gap-3">
-          {services.map((s) => {
-            const Icon = s.icon
-            return (
-              <div key={s.name} className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-card border">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${s.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className="text-xs font-medium">{s.name}</span>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Denki AI Section */}
-      <section className="max-w-lg mx-auto px-6 py-10">
-        <div className="rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 border border-primary/10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center">
-              <Bot className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <p className="font-bold">Meet Denki</p>
-              <p className="text-xs text-muted-foreground">Your AI service assistant</p>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-            Not sure what professional you need? Just describe your problem — by voice or text.
-            Denki analyzes the situation, recommends the right expert, and matches you with
-            verified workers nearby in seconds.
-          </p>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-              <span>Voice and text input — speak naturally</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-              <span>Smart matching based on skills, distance, and rating</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-              <span>Real-time updates — know when your worker is on the way</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="max-w-lg mx-auto px-6 py-10">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-6">How it works</p>
-        <div className="space-y-6">
-          {steps.map((s) => (
-            <div key={s.step} className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-                {s.step}
-              </div>
-              <div className="pt-1">
-                <p className="font-semibold">{s.title}</p>
-                <p className="text-sm text-muted-foreground">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Trust Signals */}
-      <section className="max-w-lg mx-auto px-6 py-10">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 rounded-2xl bg-green-50 flex items-center justify-center">
-              <Shield className="h-5 w-5 text-green-600" />
-            </div>
-            <p className="text-xs font-medium">Verified Workers</p>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center">
-              <Clock className="h-5 w-5 text-blue-600" />
-            </div>
-            <p className="text-xs font-medium">Fast Matching</p>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center">
-              <Star className="h-5 w-5 text-amber-600" />
-            </div>
-            <p className="text-xs font-medium">Rated & Reviewed</p>
-          </div>
-        </div>
-      </section>
-
-      {/* For Workers CTA */}
-      <section className="max-w-lg mx-auto px-6 py-10">
-        <div className="rounded-3xl bg-card border p-6 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Users className="h-6 w-6 text-primary" />
-          </div>
-          <h2 className="text-lg font-bold mb-2">Are you a skilled worker?</h2>
-          <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
-            Join Kita and get matched with clients looking for your skills.
-            Set your own availability and start earning.
-          </p>
-          <Link href="/register">
-            <Button variant="outline" className="rounded-2xl px-6">
-              Join as a Worker <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="max-w-lg mx-auto px-6 pt-8 pb-12 text-center border-t">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <KitaLogo className="h-6 w-6" />
-          <span className="font-bold">Kita</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Every service, one tap away
+      <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/10 p-5 mb-6">
+        <p className="font-semibold text-lg mb-1">Do you need any service right now?</p>
+        <p className="text-sm text-muted-foreground mb-4">
+          Browse our marketplace and find a professional near you.
         </p>
-      </footer>
-    </div>
+        <Link href="/client/services">
+          <Button className="rounded-xl">
+            <Search className="h-4 w-4 mr-2" />
+            Browse Services
+          </Button>
+        </Link>
+      </div>
+
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Clock className="h-4 w-4 text-primary" />
+            Pending Requests
+          </h2>
+          {activeJobs.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {activeJobs.length}
+            </Badge>
+          )}
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : activeJobs.length === 0 ? (
+          <div className="rounded-xl border bg-card p-6 text-center">
+            <p className="text-sm text-muted-foreground">No active requests</p>
+            <Link href="/client/post">
+              <Button variant="link" size="sm" className="mt-2">
+                Post a request <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {activeJobs.map((job) => {
+              const isPending = job.status === "Pending"
+              const href = isPending ? `/client/job/${job._id}` : `/client/chats/${job._id}`
+              const workerName =
+                typeof job.workerId === "object" && job.workerId?.name
+                  ? job.workerId.name
+                  : null
+              return (
+                <Link key={job._id} href={href}>
+                  <div className="rounded-xl border bg-card p-4 hover:border-primary/30 transition-colors">
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="font-medium text-sm">
+                        {job.title || job.description.slice(0, 50)}
+                      </p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[job.status] || "bg-muted"}`}>
+                        {statusLabel[job.status] || job.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      {job.category && (
+                        <p className="text-xs text-muted-foreground">{job.category}</p>
+                      )}
+                      {!isPending && (
+                        <span className="text-xs text-primary flex items-center gap-1">
+                          <MessageCircle className="h-3 w-3" />
+                          {workerName ? `Chat with ${workerName}` : "Open chat"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="fixed bottom-6 right-6 z-40">
+        <Sheet open={chatbotOpen} onOpenChange={(open) => open && setChatbotOpen(true)}>
+          <Button
+            size="lg"
+            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl"
+            onClick={() => setChatbotOpen(true)}
+          >
+            <MessageCircle className="w-6 h-6" />
+          </Button>
+          <SheetContent
+            side="right"
+            className="w-full p-0 data-[state=open]:duration-700 data-[state=closed]:duration-400 data-[state=open]:ease-out"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+          >
+            <ChatbotVoiceAgent onClose={() => setChatbotOpen(false)} />
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {wakeStatus !== 'idle' && (
+        <div className="fixed bottom-2 right-6 z-30 text-xs text-muted-foreground">
+          Wake listener: {wakeStatus}
+        </div>
+      )}
+
+      <section>
+        <h2 className="font-semibold flex items-center gap-2 mb-3">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          Recent Services
+        </h2>
+        {recentJobs.length === 0 ? (
+          <div className="rounded-xl border bg-card p-6 text-center">
+            <p className="text-sm text-muted-foreground">No completed services yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recentJobs.slice(0, 5).map((job) => {
+              const workerName =
+                typeof job.workerId === "object" && job.workerId?.name
+                  ? job.workerId.name
+                  : "Worker"
+              return (
+                <div key={job._id} className="rounded-xl border bg-card p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">{job.title || job.description.slice(0, 40)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">by {workerName}</p>
+                  </div>
+                  <Link href="/client/chats">
+                    <Button variant="outline" size="sm" className="rounded-lg text-xs">
+                      <MessageCircle className="h-3 w-3 mr-1" />
+                      Contact again
+                    </Button>
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div >
   )
 }
