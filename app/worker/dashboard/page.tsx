@@ -252,22 +252,49 @@ export default function WorkerDashboardPage() {
                         </p>
                       )}
                     </div>
-                    <StepIcon className="h-4 w-4 text-primary shrink-0" />
+                    <StepIcon className={`h-4 w-4 text-primary shrink-0 ${job.status === "InProgress" ? "animate-spin" : ""}`} />
                   </div>
 
                   {/* Status progress bar */}
-                  <div className="flex items-center gap-1 mb-3">
-                    {statusSteps.map((step, i) => (
-                      <div
-                        key={step.key}
-                        className={`h-1.5 flex-1 rounded-full ${
-                          i <= currentStepIdx ? "bg-primary" : "bg-muted"
-                        }`}
-                      />
-                    ))}
+                  <div className="flex gap-1.5 mb-3">
+                    {statusSteps.map((step, i) => {
+                      const isCurrent = i === currentStepIdx
+                      const isActive = i <= currentStepIdx
+                      const isLastStep = step.key === "WorkDone"
+                      const isFinished = isCurrent && isLastStep
+                      const showShimmer = isCurrent && !isFinished
+                      const Icon = isFinished ? CheckCircle : (stepIcons[step.key] || Briefcase)
+                      return (
+                        <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className={`h-2 w-full rounded-full ${
+                              isFinished ? "bg-green-500" : isActive && !isCurrent ? "bg-primary" : !isActive ? "bg-muted" : ""
+                            }`}
+                            style={
+                              showShimmer
+                                ? {
+                                    background:
+                                      "linear-gradient(90deg, var(--primary) 0%, var(--primary) 30%, color-mix(in srgb, var(--primary), white 40%) 50%, var(--primary) 70%, var(--primary) 100%)",
+                                    backgroundSize: "200% 100%",
+                                    animation: "progress-shimmer 2s ease-in-out infinite, progress-pulse 2s ease-in-out infinite",
+                                  }
+                                : undefined
+                            }
+                          />
+                          <div className={`flex flex-col items-center gap-0.5 ${
+                            isFinished ? "text-green-600" : isCurrent ? "text-primary" : isActive ? "text-primary/70" : "text-muted-foreground/50"
+                          }`}>
+                            <Icon className={`h-3 w-3 ${isCurrent && step.key === "InProgress" ? "animate-spin" : ""}`} />
+                            <span className={`text-[9px] leading-tight text-center ${isCurrent ? "font-semibold" : "font-normal"}`}>
+                              {isFinished ? "Done" : step.label}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex items-center justify-end">
+                    <p className="sr-only">
                       {currentStep?.label || job.status}
                     </p>
                     {currentStep?.next && (
