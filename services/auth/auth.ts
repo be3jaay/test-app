@@ -57,6 +57,7 @@ export type LoginResponse = {
   access_token: string;
   role: string;
   has_completed: boolean;
+  userId: string;
 };
 
 async function login(email: string, password: string): Promise<LoginResponse> {
@@ -75,6 +76,7 @@ async function login(email: string, password: string): Promise<LoginResponse> {
       access_token: response.data.token,
       role: response.data.role ?? "Client",
       has_completed: response.data.has_completed ?? true,
+      userId: response.data._id,
     };
   } catch (error) {
     console.error(error);

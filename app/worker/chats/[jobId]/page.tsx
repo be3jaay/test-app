@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input"
 import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
+import { TokenStorage } from "@/services/token-storage"
 import { Loader2, ArrowLeft, Send } from "lucide-react"
 
 type Message = {
   _id: string
-  sender?: string
-  senderId: { _id: string; name?: string; role?: string } | string
+  senderId: { _id: string; email?: string } | string
+  receiverId: { _id: string; email?: string } | string
   content: string
   createdAt: string
 }
@@ -93,8 +94,8 @@ export default function WorkerChatRoomPage() {
           </div>
         ) : (
           messages.map((msg) => {
-            const senderRole = typeof msg.senderId === "object" ? msg.senderId?.role : ""
-            const isMe = senderRole?.toLowerCase() === "worker" || msg.sender === "Worker" || msg.sender === "worker"
+            const senderId = typeof msg.senderId === "object" ? msg.senderId._id : msg.senderId
+            const isMe = senderId === TokenStorage.getUserId()
             return (
               <div
                 key={msg._id}
