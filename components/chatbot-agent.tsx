@@ -10,9 +10,72 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
     const [logs, setLogs] = useState<string[]>([])
     const [status, setStatus] = useState('Idle')
     const [isListening, setIsListening] = useState(false)
+    const [isSpeaking, setIsSpeaking] = useState(false)
 
     const recognitionRef = useRef<any>(null)
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const ttsQueueRef = useRef<string[]>([])
+    const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
+    const isPlayingTtsRef = useRef(false)
+
+    const playTtsQueue = useCallback(async () => {
+        if (isPlayingTtsRef.current || ttsQueueRef.current.length === 0) return
+        const text = ttsQueueRef.current.shift()
+        if (!text) return
+
+        recognitionRef.current?.stop()
+        setIsListening(false)
+        isPlayingTtsRef.current = true
+        setIsSpeaking(true)
+        setStatus('Speaking...')
+
+        try {
+            const res = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                throw new Error((err as { error?: string }).error ?? `TTS failed: ${res.status}`)
+            }
+            const result = (await res.json()) as { audioContent?: string }
+            if (!result.audioContent) throw new Error('No audio in TTS response')
+
+            const audioBuffer = Uint8Array.from(atob(result.audioContent), (c) => c.charCodeAt(0))
+            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+            const url = URL.createObjectURL(blob)
+
+            const audio = new Audio(url)
+            ttsAudioRef.current = audio
+            audio.onended = () => {
+                URL.revokeObjectURL(url)
+                ttsAudioRef.current = null
+                isPlayingTtsRef.current = false
+                setIsSpeaking(false)
+                if (ttsQueueRef.current.length > 0) {
+                    setStatus('Speaking...')
+                    playTtsQueue()
+                } else {
+                    setStatus('Task complete')
+                }
+            }
+            audio.onerror = () => {
+                URL.revokeObjectURL(url)
+                isPlayingTtsRef.current = false
+                setIsSpeaking(false)
+                if (ttsQueueRef.current.length > 0) playTtsQueue()
+                else setStatus('Task complete')
+            }
+            await audio.play()
+        } catch (err) {
+            console.error('TTS error:', err)
+            isPlayingTtsRef.current = false
+            setIsSpeaking(false)
+            if (ttsQueueRef.current.length > 0) playTtsQueue()
+            else setStatus('Task complete')
+        }
+    }, [])
 
     useEffect(() => {
         const SpeechRecognition =
@@ -37,7 +100,16 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
 
         recognitionRef.current = recognition
 
-        return () => recognition.stop()
+        return () => {
+            recognition.stop()
+            if (ttsAudioRef.current) {
+                ttsAudioRef.current.pause()
+                ttsAudioRef.current.currentTime = 0
+                ttsAudioRef.current = null
+            }
+            ttsQueueRef.current = []
+            isPlayingTtsRef.current = false
+        }
     }, [])
 
     const sendMessage = useCallback(() => {
@@ -61,9 +133,18 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
 
         setTimeout(() => {
             setLogs((prev) => [...prev, `[Agent] Found 3 workers near your location.`])
-            setStatus('Task complete')
+            setStatus('Speaking...')
+            const mockAgentLines = [
+                'Analyzing problem...',
+                'Searching nearby workers...',
+                'Found 3 workers near your location.',
+            ]
+            isPlayingTtsRef.current = false
+            ttsQueueRef.current = []
+            mockAgentLines.forEach((line) => ttsQueueRef.current.push(line))
+            playTtsQueue()
         }, 2000)
-    }, [input])
+    }, [input, playTtsQueue])
 
     useEffect(() => {
         if (isListening && input.trim().length > 0) {
@@ -91,8 +172,15 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
         recognitionRef.current?.stop()
         setIsListening(false)
         setStatus('Idle')
-
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+        if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause()
+            ttsAudioRef.current.currentTime = 0
+            ttsAudioRef.current = null
+        }
+        ttsQueueRef.current = []
+        isPlayingTtsRef.current = false
+        setIsSpeaking(false)
     }
 
     return (

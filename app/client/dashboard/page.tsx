@@ -307,8 +307,15 @@ export default function ClientDashboardPage() {
         )}
       </section>
 
-      <div className="fixed bottom-6 right-6 z-40">
+      <div className="fixed bottom-24 right-6 z-40">
         <Sheet open={chatbotOpen} onOpenChange={(open) => open && setChatbotOpen(true)}>
+          <Button
+            size="lg"
+            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl"
+            onClick={() => setChatbotOpen(true)}
+          >
+            <MessageCircle className="w-6 h-6" />
+          </Button>
           <SheetContent
             side="right"
             className="w-full p-0 data-[state=open]:duration-700 data-[state=closed]:duration-400 data-[state=open]:ease-out"
