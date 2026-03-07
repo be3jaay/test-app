@@ -1,0 +1,231 @@
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import {
+  Zap,
+  Shield,
+  Clock,
+  Users,
+  Bot,
+  Wrench,
+  Droplets,
+  Paintbrush,
+  Sparkles,
+  ArrowRight,
+  Star,
+  CheckCircle,
+} from "lucide-react"
+
+const services = [
+  { name: "Electrician", icon: Zap, color: "bg-yellow-50 text-yellow-600" },
+  { name: "Plumber", icon: Droplets, color: "bg-blue-50 text-blue-600" },
+  { name: "Painter", icon: Paintbrush, color: "bg-purple-50 text-purple-600" },
+  { name: "Handyman", icon: Wrench, color: "bg-orange-50 text-orange-600" },
+  { name: "Cleaning", icon: Sparkles, color: "bg-green-50 text-green-600" },
+  { name: "And more", icon: ArrowRight, color: "bg-muted text-muted-foreground" },
+]
+
+const steps = [
+  { step: "1", title: "Describe your problem", desc: "Tell Denki what you need, by voice or text" },
+  { step: "2", title: "Get matched instantly", desc: "Our AI finds the right professional for you" },
+  { step: "3", title: "Job done, guaranteed", desc: "Track progress, chat, and pay securely" },
+]
+
+function KitaLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <g filter="url(#filter0_ii_9_29)">
+        <path d="M63.6 0.300201C75.3637 0.300201 84.8998 9.83634 84.8998 21.6V63.6C84.8998 75.3637 75.3637 84.8998 63.6 84.8998H21.6C9.83634 84.8998 0.300201 75.3637 0.300201 63.6V21.6C0.300201 9.83634 9.83634 0.300201 21.6 0.300201H63.6Z" fill="url(#paint0_linear_9_29)" stroke="#D2D2D2" strokeWidth="0.6"/>
+        <path d="M41.7903 31.6C45.6562 31.6 48.7903 28.466 48.7903 24.6C48.7903 23.6159 48.5872 22.6792 48.2207 21.8296C47.1473 19.3416 44.6722 17.6 41.7903 17.6C37.9243 17.6 34.7903 20.734 34.7903 24.6C34.7903 28.466 37.9243 31.6 41.7903 31.6Z" fill="white"/>
+        <path d="M24.1 39.6C27.6 41.1 31.1 43.1 34.6 43.1C47.9593 43.1 49.6 32.1 61.1 36.6" stroke="white" strokeWidth="5" strokeLinecap="round"/>
+        <path d="M23.6 57.825C26.6058 61.1649 31.6067 62.1668 35.6233 62.1668C48.9826 62.1668 53.0767 48.9812 65.1 55.3268" stroke="white" strokeWidth="5" strokeLinecap="round"/>
+        <path d="M45.9565 59.813C44.5769 57.2 46.7934 50.5676 42.6 39.653" stroke="white" strokeWidth="6"/>
+      </g>
+      <defs>
+        <filter id="filter0_ii_9_29" x="0" y="-3" width="85.2" height="92.2" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+          <feFlood floodOpacity="0" result="BackgroundImageFix"/>
+          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+          <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+          <feOffset dy="-3"/>
+          <feGaussianBlur stdDeviation="4.7"/>
+          <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.23 0"/>
+          <feBlend mode="normal" in2="shape" result="effect1_innerShadow_9_29"/>
+          <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+          <feOffset dy="4"/>
+          <feGaussianBlur stdDeviation="2"/>
+          <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.25 0"/>
+          <feBlend mode="normal" in2="effect1_innerShadow_9_29" result="effect2_innerShadow_9_29"/>
+        </filter>
+        <linearGradient id="paint0_linear_9_29" x1="199.1" y1="20.1" x2="-47.9" y2="149.1" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#64CF53"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
+export default function LandingPage() {
+  return (
+    <div className="min-h-svh bg-background">
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+        <div className="relative max-w-lg mx-auto px-6 pt-16 pb-12 text-center">
+          {/* Logo */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
+            <KitaLogo className="h-5 w-5" />
+            Powered by Denki AI
+          </div>
+
+          <h1 className="text-4xl font-extrabold tracking-tight leading-[1.15] mb-4">
+            Every service you need,{" "}
+            <span className="text-primary">one tap away</span>
+          </h1>
+
+          <p className="text-muted-foreground leading-relaxed mb-8 max-w-sm mx-auto">
+            Kita is the marketplace where you find any skilled professional near you.
+            Our AI assistant Denki handles the rest — from matching to booking.
+          </p>
+
+          <div className="flex flex-col gap-3 max-w-xs mx-auto">
+            <Link href="/register">
+              <Button size="lg" className="w-full h-13 text-base font-semibold rounded-2xl shadow-lg shadow-primary/20">
+                Get Started
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button variant="ghost" size="lg" className="w-full h-13 text-base rounded-2xl">
+                I already have an account
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Services Grid */}
+      <section className="max-w-lg mx-auto px-6 py-10">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Popular services</p>
+        <div className="grid grid-cols-3 gap-3">
+          {services.map((s) => {
+            const Icon = s.icon
+            return (
+              <div key={s.name} className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-card border">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${s.color}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className="text-xs font-medium">{s.name}</span>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Denki AI Section */}
+      <section className="max-w-lg mx-auto px-6 py-10">
+        <div className="rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 border border-primary/10">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center">
+              <Bot className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <p className="font-bold">Meet Denki</p>
+              <p className="text-xs text-muted-foreground">Your AI service assistant</p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+            Not sure what professional you need? Just describe your problem — by voice or text.
+            Denki analyzes the situation, recommends the right expert, and matches you with
+            verified workers nearby in seconds.
+          </p>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+              <span>Voice and text input — speak naturally</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+              <span>Smart matching based on skills, distance, and rating</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+              <span>Real-time updates — know when your worker is on the way</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="max-w-lg mx-auto px-6 py-10">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-6">How it works</p>
+        <div className="space-y-6">
+          {steps.map((s) => (
+            <div key={s.step} className="flex gap-4">
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                {s.step}
+              </div>
+              <div className="pt-1">
+                <p className="font-semibold">{s.title}</p>
+                <p className="text-sm text-muted-foreground">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Trust Signals */}
+      <section className="max-w-lg mx-auto px-6 py-10">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-10 h-10 rounded-2xl bg-green-50 flex items-center justify-center">
+              <Shield className="h-5 w-5 text-green-600" />
+            </div>
+            <p className="text-xs font-medium">Verified Workers</p>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center">
+              <Clock className="h-5 w-5 text-blue-600" />
+            </div>
+            <p className="text-xs font-medium">Fast Matching</p>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center">
+              <Star className="h-5 w-5 text-amber-600" />
+            </div>
+            <p className="text-xs font-medium">Rated & Reviewed</p>
+          </div>
+        </div>
+      </section>
+
+      {/* For Workers CTA */}
+      <section className="max-w-lg mx-auto px-6 py-10">
+        <div className="rounded-3xl bg-card border p-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Users className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="text-lg font-bold mb-2">Are you a skilled worker?</h2>
+          <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
+            Join Kita and get matched with clients looking for your skills.
+            Set your own availability and start earning.
+          </p>
+          <Link href="/register">
+            <Button variant="outline" className="rounded-2xl px-6">
+              Join as a Worker <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="max-w-lg mx-auto px-6 py-8 text-center border-t">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <KitaLogo className="h-6 w-6" />
+          <span className="font-bold">Kita</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Every service, one tap away
+        </p>
+      </footer>
+    </div>
+  )
+}

@@ -9,8 +9,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Become a Service Provider',
-  description: 'Join our service marketplace and start earning by offering your skills',
+  title: 'Kita — Every service, one tap away',
+  description: 'Find any skilled professional near you. Our AI assistant Denki handles matching and booking.',
   generator: 'v0.app',
   icons: {
     icon: [
