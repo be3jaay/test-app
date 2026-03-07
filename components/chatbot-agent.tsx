@@ -4,78 +4,18 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Mic, MicOff, Send, Bot, X } from 'lucide-react'
+import ApiService from '@/services/api-services'
 
 export function ChatbotAgent({ onClose }: { onClose: () => void }) {
     const [input, setInput] = useState('')
     const [logs, setLogs] = useState<string[]>([])
     const [status, setStatus] = useState('Idle')
     const [isListening, setIsListening] = useState(false)
-    const [isSpeaking, setIsSpeaking] = useState(false)
+    const [isThinking, setIsThinking] = useState(false)
 
     const recognitionRef = useRef<any>(null)
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const ttsQueueRef = useRef<string[]>([])
-    const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
-    const isPlayingTtsRef = useRef(false)
-
-    const playTtsQueue = useCallback(async () => {
-        if (isPlayingTtsRef.current || ttsQueueRef.current.length === 0) return
-        const text = ttsQueueRef.current.shift()
-        if (!text) return
-
-        recognitionRef.current?.stop()
-        setIsListening(false)
-        isPlayingTtsRef.current = true
-        setIsSpeaking(true)
-        setStatus('Speaking...')
-
-        try {
-            const res = await fetch('/api/tts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
-            })
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}))
-                throw new Error((err as { error?: string }).error ?? `TTS failed: ${res.status}`)
-            }
-            const result = (await res.json()) as { audioContent?: string }
-            if (!result.audioContent) throw new Error('No audio in TTS response')
-
-            const audioBuffer = Uint8Array.from(atob(result.audioContent), (c) => c.charCodeAt(0))
-            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
-            const url = URL.createObjectURL(blob)
-
-            const audio = new Audio(url)
-            ttsAudioRef.current = audio
-            audio.onended = () => {
-                URL.revokeObjectURL(url)
-                ttsAudioRef.current = null
-                isPlayingTtsRef.current = false
-                setIsSpeaking(false)
-                if (ttsQueueRef.current.length > 0) {
-                    setStatus('Speaking...')
-                    playTtsQueue()
-                } else {
-                    setStatus('Task complete')
-                }
-            }
-            audio.onerror = () => {
-                URL.revokeObjectURL(url)
-                isPlayingTtsRef.current = false
-                setIsSpeaking(false)
-                if (ttsQueueRef.current.length > 0) playTtsQueue()
-                else setStatus('Task complete')
-            }
-            await audio.play()
-        } catch (err) {
-            console.error('TTS error:', err)
-            isPlayingTtsRef.current = false
-            setIsSpeaking(false)
-            if (ttsQueueRef.current.length > 0) playTtsQueue()
-            else setStatus('Task complete')
-        }
-    }, [])
+    const conversationRef = useRef<{ role: string; content: string }[]>([])
 
     useEffect(() => {
         const SpeechRecognition =
@@ -100,51 +40,95 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
 
         recognitionRef.current = recognition
 
-        return () => {
-            recognition.stop()
-            if (ttsAudioRef.current) {
-                ttsAudioRef.current.pause()
-                ttsAudioRef.current.currentTime = 0
-                ttsAudioRef.current = null
-            }
-            ttsQueueRef.current = []
-            isPlayingTtsRef.current = false
-        }
+        return () => { recognition.stop() }
     }, [])
 
-    const sendMessage = useCallback(() => {
-        if (!input.trim()) return
+    const sendMessage = useCallback(async () => {
+        if (!input.trim() || isThinking) return
 
         const userMessage = input
         setInput('')
+        setIsThinking(true)
 
-        setLogs((prev) => [...prev, `[User] ${userMessage}`])
-        setStatus('Understanding request...')
+        conversationRef.current.push({ role: 'user', content: userMessage })
+        setLogs((prev) => [...prev, `[You] ${userMessage}`])
+        setStatus('Thinking...')
 
-        setTimeout(() => {
-            setLogs((prev) => [...prev, `[Agent] Analyzing problem...`])
-            setStatus('Analyzing')
-        }, 500)
+        try {
+            const response = await ApiService.post<any>(
+                '/denki/chat',
+                { messages: conversationRef.current }
+            )
 
-        setTimeout(() => {
-            setLogs((prev) => [...prev, `[Agent] Searching nearby workers...`])
-            setStatus('Searching workers')
-        }, 1200)
+            const data = response?.data ?? response
+            const denki = data?.data ?? data
 
-        setTimeout(() => {
-            setLogs((prev) => [...prev, `[Agent] Found 3 workers near your location.`])
-            setStatus('Speaking...')
-            const mockAgentLines = [
-                'Analyzing problem...',
-                'Searching nearby workers...',
-                'Found 3 workers near your location.',
-            ]
-            isPlayingTtsRef.current = false
-            ttsQueueRef.current = []
-            mockAgentLines.forEach((line) => ttsQueueRef.current.push(line))
-            playTtsQueue()
-        }, 2000)
-    }, [input, playTtsQueue])
+            conversationRef.current.push({ role: 'assistant', content: denki.message })
+            setLogs((prev) => [...prev, `[Denki] ${denki.message}`])
+
+            if (denki.phase === 'summarizing' && denki.summary) {
+                setLogs((prev) => [
+                    ...prev,
+                    `── Summary: ${denki.summary}`,
+                    `── Category: ${denki.category} | Urgency: ${denki.urgency}`,
+                ])
+            }
+
+            if (denki.phase === 'ready' && denki.summary) {
+                setLogs((prev) => [...prev, `[Denki] Matching you with a professional...`])
+                setStatus('Matching...')
+
+                let longitude: number | undefined
+                let latitude: number | undefined
+                try {
+                    const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+                    )
+                    longitude = pos.coords.longitude
+                    latitude = pos.coords.latitude
+                } catch { /* location not available */ }
+
+                const matchRes = await ApiService.post<any>('/denki/match', {
+                    category: denki.category,
+                    summary: denki.summary,
+                    urgency: denki.urgency,
+                    longitude,
+                    latitude,
+                })
+
+                const matchData = matchRes?.data?.data ?? matchRes?.data ?? matchRes
+                const best = matchData?.bestMatch
+
+                if (best) {
+                    setLogs((prev) => [
+                        ...prev,
+                        `[Denki] Found a match!`,
+                        `── ${best.name} (★ ${best.rating}) — ${best.skills?.join(', ')}`,
+                        `── Job created: ${matchData.job?._id}`,
+                    ])
+                    setStatus('Match found!')
+                } else {
+                    setLogs((prev) => [
+                        ...prev,
+                        `[Denki] Job posted! Waiting for a worker to accept.`,
+                        `── Job ID: ${matchData.job?._id}`,
+                    ])
+                    setStatus('Job posted')
+                }
+            } else {
+                setStatus(
+                    denki.phase === 'gathering' ? 'Listening...' :
+                        denki.phase === 'summarizing' ? 'Confirm your request' : 'Ready'
+                )
+            }
+        } catch (err) {
+            console.error('Denki error:', err)
+            setLogs((prev) => [...prev, `[Denki] Sorry, something went wrong. Try again.`])
+            setStatus('Error — try again')
+        } finally {
+            setIsThinking(false)
+        }
+    }, [input, isThinking])
 
     useEffect(() => {
         if (isListening && input.trim().length > 0) {
@@ -153,7 +137,7 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
             silenceTimerRef.current = setTimeout(() => {
                 sendMessage()
                 stopListening()
-            }, 5000)
+            }, 3000)
         }
 
         return () => {
@@ -173,14 +157,6 @@ export function ChatbotAgent({ onClose }: { onClose: () => void }) {
         setIsListening(false)
         setStatus('Idle')
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-        if (ttsAudioRef.current) {
-            ttsAudioRef.current.pause()
-            ttsAudioRef.current.currentTime = 0
-            ttsAudioRef.current = null
-        }
-        ttsQueueRef.current = []
-        isPlayingTtsRef.current = false
-        setIsSpeaking(false)
     }
 
     return (
