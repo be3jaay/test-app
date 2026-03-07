@@ -22,7 +22,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-full p-0">
-            <ChatbotAgent />
+            <ChatbotAgent onClose={() => setChatbotOpen(false)} />
           </SheetContent>
         </Sheet>
       </div>

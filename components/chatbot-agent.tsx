@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Mic, MicOff, Send, Bot } from 'lucide-react'
+import { Mic, MicOff, Send, Bot, X } from 'lucide-react'
 
-export function ChatbotAgent() {
+export function ChatbotAgent({ onClose }: { onClose: () => void }) {
     const [input, setInput] = useState('')
     const [logs, setLogs] = useState<string[]>([])
     const [status, setStatus] = useState('Idle')
@@ -99,14 +99,25 @@ export function ChatbotAgent() {
         <div className="flex flex-col h-full bg-background">
 
             {/* Agent Header */}
-            <div className="border-b p-4 flex items-center gap-3">
-                <Bot className="w-6 h-6 text-primary" />
-                <div>
-                    <h2 className="font-semibold">Denki Agent</h2>
-                    <p className="text-xs text-muted-foreground">
-                        Autonomous Worker Finder
-                    </p>
+            <div className="border-b p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <Bot className="w-6 h-6 text-primary" />
+                    <div>
+                        <h2 className="font-semibold">Denki Agent</h2>
+                        <p className="text-xs text-muted-foreground">
+                            Autonomous Worker Finder
+                        </p>
+                    </div>
                 </div>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    aria-label="Close chatbot agent"
+                >
+                    <X className="h-5 w-5" />
+                </Button>
             </div>
 
             {/* Agent Status */}
