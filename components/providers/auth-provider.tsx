@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, useRef } f
 import { usePathname, useRouter } from "next/navigation"
 import { TokenStorage } from "@/services/token-storage"
 import { TRole } from "@/services/auth/types"
+import ApiService from "@/services/api-services"
 
 type AuthState = {
   isAuthenticated: boolean
@@ -38,6 +39,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading: false,
     })
     isMountedRef.current = true
+
+    // If logged in but userId is missing, fetch profile to recover it
+    if (token && !TokenStorage.getUserId()) {
+      ApiService.get<{ _id?: string; data?: { _id?: string } }>("/auth/profile")
+        .then((res: any) => {
+          const id = res?._id || res?.data?._id
+          if (id) TokenStorage.setUserId(id)
+        })
+        .catch(() => {})
+    }
   }, [])
 
   // Re-sync auth state from storage whenever route changes (e.g. after login redirect)

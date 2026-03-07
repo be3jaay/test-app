@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, Mic, MicOff, X, Send, StopCircle } from 'lucide-react'
+import { Bot, Mic, MicOff, X, Send, StopCircle, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SpeakingOrb } from '@/components/speaking-orb'
 import { cn } from '@/lib/utils'
 import ApiService from '@/services/api-services'
 import { useRouter } from 'next/navigation'
+
+const pick = (lines: string[]) => lines[Math.floor(Math.random() * lines.length)]
 
 type SpeechRecognitionResultEvent = Event & {
     resultIndex: number
@@ -55,6 +57,7 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
     const [matchData, setMatchData] = useState<any>(null)
     const [isBooking, setIsBooking] = useState(false)
 
+    const denkiPhaseRef = useRef<string>('gathering')
     const recognitionRef = useRef<WebSpeechRecognition | null>(null)
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
     const accumulatedTranscriptRef = useRef<string>('')
@@ -77,6 +80,7 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
     // Keep refs in sync with state so callbacks always have fresh values
     useEffect(() => { isSpeakingRef.current = isSpeaking }, [isSpeaking])
     useEffect(() => { recommendedWorkerRef.current = recommendedWorker }, [recommendedWorker])
+    useEffect(() => { denkiPhaseRef.current = denkiPhase }, [denkiPhase])
 
     // --- Scroll ---
     useEffect(() => {
@@ -217,7 +221,7 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
         setIsBooking(true)
         setDenkiPhase('booking')
         setStatus('Booking...')
-        const bookingLines = ["On it, setting that up now!"]
+        const bookingLines = [pick(["On it, setting that up now!", "Cool, let me get that going.", "Perfect, give me one sec.", "Alright, booking that for you."])]
         setLogs((prev) => [...prev, ...bookingLines.map(r => ({ role: 'agent' as const, text: r }))])
         ttsQueueRef.current = [...bookingLines]
         playTtsQueue()
@@ -247,8 +251,15 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
 
             const best = data?.bestMatch
             const confirmLines = best
-                ? [`Sent a request to ${best.name}! You can tap View Request to check your booking status.`]
-                : ["Your request is posted! Tap View Request to see the status."]
+                ? [pick([
+                    `Done! I've sent your request to ${best.name}. Hit View Request to track it.`,
+                    `Request sent to ${best.name}. You can check the status with View Request.`,
+                    `All set, ${best.name} has your request now. Tap View Request to follow along.`,
+                  ])]
+                : [pick([
+                    "Your request is out there. Tap View Request to keep an eye on it.",
+                    "Posted! Check View Request to see how it's going.",
+                  ])]
 
             setLogs((prev) => [...prev, ...confirmLines.map(r => ({ role: 'agent' as const, text: r }))])
             ttsQueueRef.current = [...confirmLines]
@@ -256,12 +267,16 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
             setDenkiPhase('matched')
             setStatus('Waiting for worker')
             playTtsQueue()
-        } catch {
+        } catch (err: any) {
             setIsBooking(false)
-            const errLines = ["Sorry, something went wrong. You can try again."]
+            const errorMsg = err?.response?.data?.message || err?.message || ''
+            const isDuplicate = errorMsg.includes('already have an active request') || err?.response?.status === 409
+            const errLines = isDuplicate
+                ? [pick(["You've already got an active request with them. Want to try someone else?", "Looks like you already booked them. I can find another if you want."])]
+                : [pick(["Hmm, that didn't go through. Want to try again?", "Something went sideways. Give it another shot?"])]
             setLogs((prev) => [...prev, ...errLines.map(r => ({ role: 'agent' as const, text: r }))])
             ttsQueueRef.current = [...errLines]
-            setDenkiPhase('summarizing')
+            setDenkiPhase(isDuplicate ? 'summarizing' : 'summarizing')
             setStatus('Error')
             playTtsQueue()
         }
@@ -278,7 +293,7 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
 
         setRecommendedWorker(null)
         setStatus('Searching...')
-        const searchLines = ["Let me find someone else."]
+        const searchLines = [pick(["Let me see who else is around.", "Sure, let me pull up another option.", "No problem, checking for someone else."])]
         setLogs((prev) => [...prev, ...searchLines.map(r => ({ role: 'agent' as const, text: r }))])
         ttsQueueRef.current = [...searchLines]
         playTtsQueue()
@@ -300,7 +315,12 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
                 lastDenkiResult.current = result
                 setRecommendedWorker(worker)
                 const ratingText = worker.rating > 0 ? `, rated ${worker.rating} out of 5` : ''
-                const lines = [`How about ${worker.name}${ratingText}?`]
+                const descText = worker.serviceDescription ? ` Their profile says: ${worker.serviceDescription}.` : ''
+                const lines = [pick([
+                    `Here's another one, ${worker.name}${ratingText}.${descText} Want me to book them?`,
+                    `What about ${worker.name}${ratingText}?${descText} Should I send them your request?`,
+                    `Found ${worker.name}${ratingText}.${descText} Want to go with them?`,
+                ])]
                 conversationRef.current.push({ role: 'assistant', content: lines[0] })
                 setLogs((prev) => [...prev, ...lines.map(r => ({ role: 'agent' as const, text: r }))])
                 ttsQueueRef.current = [...lines]
@@ -308,14 +328,14 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
                 setStatus('Found another option')
             } else {
                 lastDenkiResult.current = result
-                const lines = ["No one else available right now. Want to go with the previous one?"]
+                const lines = [pick(["That's everyone I've got right now. Want to go back to the last one?", "No one else is available at the moment. Stick with the previous pick?"])]
                 setLogs((prev) => [...prev, ...lines.map(r => ({ role: 'agent' as const, text: r }))])
                 ttsQueueRef.current = [...lines]
                 setStatus('No more results')
             }
             playTtsQueue()
         } catch {
-            const errLines = ["Sorry, the search didn't work. Try again in a moment."]
+            const errLines = [pick(["That search didn't work out. Want to try again?", "Couldn't pull that up. Give it another go?"])]
             setLogs((prev) => [...prev, ...errLines.map(r => ({ role: 'agent' as const, text: r }))])
             ttsQueueRef.current = [...errLines]
             setStatus('Error')
@@ -328,6 +348,11 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
         const cleanMsg = userMessage.trim()
         if (!cleanMsg || cleanMsg === lastProcessedTranscriptRef.current) return
         if (isSpeakingRef.current || isProcessingRef.current) return
+
+        // Don't process new messages after booking is complete
+        if (denkiPhaseRef.current === 'matched' || denkiPhaseRef.current === 'booking') {
+            return
+        }
 
         isProcessingRef.current = true
         lastProcessedTranscriptRef.current = cleanMsg
@@ -408,7 +433,7 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
             playTtsQueue()
         } catch (err) {
             console.error('Denki error:', err)
-            const errLines = ["Sorry, I'm having trouble right now. Can you say that again?"]
+            const errLines = [pick(["I missed that, can you say it again?", "Something glitched on my end. Try one more time?", "Didn't catch that properly, mind repeating?"])]
             setLogs((prev) => [...prev, ...errLines.map(r => ({ role: 'agent' as const, text: r }))])
             ttsQueueRef.current = [...errLines]
             setStatus('Error')
@@ -421,6 +446,47 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
     // Keep function refs current so stable callbacks can call latest versions
     runAgentFlowRef.current = runAgentFlow
     startListeningRef.current = startListening
+
+    const handleCancel = useCallback(() => {
+        // Stop all audio and recognition
+        if (recognitionRef.current) {
+            recognitionRef.current.onresult = null
+            recognitionRef.current.stop()
+        }
+        if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause()
+            ttsAudioRef.current = null
+        }
+        clearSilenceTimer()
+
+        // Reset all state
+        ttsQueueRef.current = []
+        isPlayingTtsRef.current = false
+        isSpeakingRef.current = false
+        isProcessingRef.current = false
+        accumulatedTranscriptRef.current = ''
+        lastProcessedTranscriptRef.current = ''
+        conversationRef.current = []
+        lastDenkiResult.current = null
+        recommendedWorkerRef.current = null
+        excludedWorkerIdsRef.current = []
+        denkiPhaseRef.current = 'gathering'
+
+        setLogs([])
+        setIsListening(false)
+        setIsSpeaking(false)
+        setRecommendedWorker(null)
+        setDenkiPhase('gathering')
+        setMatchData(null)
+        setIsBooking(false)
+        setInput('')
+        setStatus('Listening...')
+
+        // Restart mic after a short delay
+        setTimeout(() => {
+            startListeningRef.current()
+        }, 300)
+    }, [clearSilenceTimer])
 
     const sendTextMessage = () => {
         if (!input.trim()) return
@@ -493,9 +559,16 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
                         <p className="text-[10px] text-muted-foreground mt-1 uppercase font-semibold tracking-tighter">{status}</p>
                     </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
-                    <X className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                    {logs.length > 0 && (
+                        <Button variant="ghost" size="icon" onClick={handleCancel} className="rounded-full h-8 w-8 hover:bg-muted" title="Start over">
+                            <RotateCcw className="h-4 w-4" />
+                        </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
             {/* Speaking Orb & Messages */}
@@ -567,6 +640,13 @@ export function ChatbotVoiceAgent({ onClose }: ChatbotVoiceAgentProps) {
                         onClick={() => router.push(`/client/job/${matchData.job._id}`)}
                     >
                         View Request
+                    </Button>
+                    <Button
+                        variant="outline"
+                        className="flex-1 rounded-full h-12"
+                        onClick={handleCancel}
+                    >
+                        New Request
                     </Button>
                 </div>
             )}

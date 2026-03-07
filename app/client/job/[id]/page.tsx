@@ -41,12 +41,19 @@ export default function ClientJobDetailPage() {
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState(false)
 
-  useEffect(() => {
-    if (!isAuthenticated || !params.id) return
+  const fetchJob = () => {
+    if (!params.id) return
     ApiService.get<{ data: Job }>(`/jobs/${params.id}`)
       .then((res) => setJob((res as any).data || res))
       .catch(() => toast.error("Failed to load job"))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated || !params.id) return
+    fetchJob()
+    const interval = setInterval(fetchJob, 10000)
+    return () => clearInterval(interval)
   }, [isAuthenticated, params.id])
 
   const handleConfirm = async () => {

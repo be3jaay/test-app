@@ -5,7 +5,7 @@ import ApiService from "../api-services";
 export type RegisterApiResponse =
   | {
       success?: boolean;
-      data?: { token?: string; role?: string; has_completed?: boolean };
+      data?: { _id?: string; token?: string; role?: string; has_completed?: boolean };
     }
   | { access_token?: string };
 
@@ -13,6 +13,7 @@ export type RegisterResponse = {
   access_token?: string;
   role?: string;
   has_completed: boolean;
+  userId?: string;
 };
 
 async function register(data: TRegisterData): Promise<RegisterResponse> {
@@ -31,10 +32,12 @@ async function register(data: TRegisterData): Promise<RegisterResponse> {
       withData?.data?.token ?? (raw as { access_token?: string }).access_token;
     const role = withData?.data?.role ?? data.role;
     const has_completed = withData?.data?.has_completed ?? false;
+    const userId = withData?.data?._id;
     return {
       access_token: token,
       role,
       has_completed,
+      userId,
     };
   } catch (error) {
     console.error(error);

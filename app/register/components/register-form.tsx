@@ -66,6 +66,7 @@ export function RegisterForm({
           TokenStorage.setAccessToken(response.access_token)
           TokenStorage.setRole(response.role ?? data.role)
           TokenStorage.setHasCompleted(response.has_completed)
+          if (response.userId) TokenStorage.setUserId(response.userId)
         }
         const nextPath =
           response?.has_completed === false
