@@ -1,4 +1,11 @@
+"use client"
+
 import { GalleryVerticalEnd } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { useForm } from "react-hook-form"
+import { yupResolver } from "@hookform/resolvers/yup"
+import * as yup from "yup"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -10,20 +17,54 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { login } from "@/services/auth/auth"
+import { TokenStorage } from "@/services/token-storage"
+import { TRole } from "@/services/auth/types"
+
+const loginSchema = yup.object({
+  email: yup.string().email("Invalid email").required("Email is required"),
+  password: yup.string().required("Password is required"),
+})
+
+type LoginFormData = yup.InferType<typeof loginSchema>
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const router = useRouter()
+  const {
+    register: registerField,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
+    resolver: yupResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  })
+
+  async function onSubmit(data: LoginFormData) {
+    return toast.promise(login(data.email, data.password), {
+      loading: "Signing in...",
+      success: (response) => {
+        if (response?.access_token) {
+          TokenStorage.setAccessToken(response.access_token)
+          const role = response.role ?? TRole.CLIENT
+          TokenStorage.setRole(role)
+          const dashboardPath = role === TRole.WORKER ? "/worker/dashboard" : "/client/dashboard"
+          setTimeout(() => router.push(dashboardPath), 500)
+        }
+        return "Signed in! Redirecting..."
+      },
+      error: (error) => (error instanceof Error ? error.message : "Login failed"),
+    })
+  }
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <form>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
-            <a
-              href="#"
-              className="flex flex-col items-center gap-2 font-medium"
-            >
+            <a href="#" className="flex flex-col items-center gap-2 font-medium">
               <div className="flex size-8 items-center justify-center rounded-md">
                 <GalleryVerticalEnd className="size-6" />
               </div>
@@ -31,7 +72,7 @@ export function LoginForm({
             </a>
             <h1 className="text-xl font-bold">Welcome to Acme Inc.</h1>
             <FieldDescription>
-              Don&apos;t have an account? <a href="#">Sign up</a>
+              Don&apos;t have an account? <a href="/register">Sign up</a>
             </FieldDescription>
           </div>
           <Field>
@@ -40,11 +81,28 @@ export function LoginForm({
               id="email"
               type="email"
               placeholder="m@example.com"
-              required
+              {...registerField("email")}
             />
+            {errors.email && (
+              <p className="mt-1 text-sm text-destructive">{errors.email.message}</p>
+            )}
           </Field>
           <Field>
-            <Button type="submit">Login</Button>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Enter your password"
+              {...registerField("password")}
+            />
+            {errors.password && (
+              <p className="mt-1 text-sm text-destructive">{errors.password.message}</p>
+            )}
+          </Field>
+          <Field>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in..." : "Login"}
+            </Button>
           </Field>
           <FieldSeparator>Or</FieldSeparator>
           <Field className="grid gap-4 sm:grid-cols-2">

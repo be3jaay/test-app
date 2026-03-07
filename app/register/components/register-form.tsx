@@ -1,7 +1,11 @@
 "use client"
 
 import { GalleryVerticalEnd } from "lucide-react"
-import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { useForm } from "react-hook-form"
+import { yupResolver } from "@hookform/resolvers/yup"
+import * as yup from "yup"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -15,38 +19,56 @@ import {
 import { Input } from "@/components/ui/input"
 import { TRegisterData, TRole } from "@/services/auth/types"
 import { register } from "@/services/auth/auth"
-import { Select } from "@/components/ui/select"
+import { TokenStorage } from "@/services/token-storage"
+
+const registerSchema = yup.object({
+  email: yup.string().email("Invalid email").required("Email is required"),
+  password: yup
+    .string()
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
+  role: yup.string().oneOf([TRole.CLIENT, TRole.WORKER]).required("Role is required"),
+}) as yup.ObjectSchema<TRegisterData>
 
 export function RegisterForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const [formData, setFormData] = useState<TRegisterData>({
-    email: "",
-    password: "",
-    role: TRole.CLIENT,
+  const router = useRouter()
+  const {
+    register: registerField,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<TRegisterData>({
+    resolver: yupResolver(registerSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      role: TRole.CLIENT,
+    },
   })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    try {
-      const response = await register(formData)
-      // Handle successful registration (e.g., redirect to login or dashboard)
-      console.log("Registration successful:", response)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Registration failed")
-    } finally {
-      setLoading(false)
-    }
+  async function onSubmit(data: TRegisterData) {
+    return toast.promise(register(data), {
+      loading: "Creating your account...",
+      success: (response) => {
+        if (response?.access_token) {
+          TokenStorage.setAccessToken(response.access_token)
+          TokenStorage.setRole(data.role)
+        }
+        const dashboardPath = data.role === TRole.WORKER ? "/worker/dashboard" : "/client/dashboard"
+        setTimeout(() => router.push(dashboardPath), 1000)
+        return "Account created successfully! Redirecting..."
+      },
+      error: (error) => {
+        return error instanceof Error ? error.message : "Registration failed"
+      },
+    })
   }
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <form onSubmit={handleRegister}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
             <a
@@ -63,21 +85,17 @@ export function RegisterForm({
               Already have an account? <a href="/login">Sign in</a>
             </FieldDescription>
           </div>
-          {error && (
-            <div className="text-sm text-red-600 text-center">
-              {error}
-            </div>
-          )}
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
             <Input
               id="email"
               type="email"
               placeholder="m@example.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
+              {...registerField("email")}
             />
+            {errors.email && (
+              <p className="text-sm text-destructive mt-1">{errors.email.message}</p>
+            )}
           </Field>
           <Field>
             <FieldLabel htmlFor="password">Password</FieldLabel>
@@ -85,27 +103,29 @@ export function RegisterForm({
               id="password"
               type="password"
               placeholder="Enter your password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
+              {...registerField("password")}
             />
+            {errors.password && (
+              <p className="text-sm text-destructive mt-1">{errors.password.message}</p>
+            )}
           </Field>
           <Field>
             <FieldLabel htmlFor="role">Role</FieldLabel>
             <select
               id="role"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value as TRole })}
-              required
+              {...registerField("role")}
             >
               <option value={TRole.CLIENT}>Client</option>
               <option value={TRole.WORKER}>Worker</option>
             </select>
+            {errors.role && (
+              <p className="text-sm text-destructive mt-1">{errors.role.message}</p>
+            )}
           </Field>
           <Field>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating account..." : "Sign up"}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating account..." : "Sign up"}
             </Button>
           </Field>
           <FieldSeparator>Or</FieldSeparator>
