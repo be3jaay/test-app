@@ -19,7 +19,11 @@ import {
   MessageCircle,
   Loader2,
   XCircle,
+  Briefcase,
+  Navigation,
+  MapPin,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { ChatbotVoiceAgent } from "@/components/chatbot-voice-agent"
 
@@ -39,7 +43,6 @@ const statusLabel: Record<string, string> = {
   OnTheWay: "On the way",
   Arrived: "Worker arrived",
   InProgress: "In progress",
-  WorkDone: "Work done",
   ClientConfirmed: "Confirmed",
   Completed: "Completed",
   Declined: "Declined",
@@ -52,11 +55,26 @@ const statusColor: Record<string, string> = {
   OnTheWay: "bg-blue-100 text-blue-700",
   Arrived: "bg-blue-100 text-blue-700",
   InProgress: "bg-purple-100 text-purple-700",
-  WorkDone: "bg-green-100 text-green-700",
   ClientConfirmed: "bg-green-100 text-green-700",
   Completed: "bg-green-100 text-green-700",
   Declined: "bg-red-100 text-red-700",
   Cancelled: "bg-red-100 text-red-700",
+}
+
+const clientStatusSteps = [
+  { key: "Accepted", label: "Accepted" },
+  { key: "OnTheWay", label: "On the way" },
+  { key: "Arrived", label: "Arrived" },
+  { key: "InProgress", label: "In progress" },
+  { key: "ClientConfirmed", label: "Confirmed" },
+]
+
+const clientStepIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  Accepted: Briefcase,
+  OnTheWay: Navigation,
+  Arrived: MapPin,
+  InProgress: Loader2,
+  ClientConfirmed: CheckCircle,
 }
 
 export default function ClientDashboardPage() {
@@ -67,6 +85,9 @@ export default function ClientDashboardPage() {
   const [loading, setLoading] = useState(true)
   const prevPendingIds = useRef<Set<string>>(new Set())
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [jobModalOpen, setJobModalOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [chatbotOpen, setChatbotOpen] = useState(false)
   const [wakeStatus, setWakeStatus] = useState<'idle' | 'listening' | 'blocked' | 'unsupported'>('idle')
   const wakeRecognitionRef = useRef<any>(null)
@@ -169,19 +190,42 @@ export default function ClientDashboardPage() {
     }
   }, [chatbotOpen])
 
-  const handleCancel = async (jobId: string, e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleCancel = async (jobId: string, e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     setCancelling(jobId)
     try {
       await ApiService.patch(`/jobs/${jobId}/cancel`, {})
       toast.success("Request cancelled")
       setJobs((prev) => prev.map((j) => j._id === jobId ? { ...j, status: "Cancelled" } : j))
+      if (selectedJob?._id === jobId) {
+        setSelectedJob((prev) => prev ? { ...prev, status: "Cancelled" } : prev)
+      }
     } catch {
       toast.error("Failed to cancel request")
     } finally {
       setCancelling(null)
     }
+  }
+
+  const handleConfirmDone = async () => {
+    if (!selectedJob) return
+    setConfirming(true)
+    try {
+      await ApiService.patch(`/jobs/${selectedJob._id}/client-confirm`, {})
+      toast.success("Job confirmed as done!")
+      setJobs((prev) => prev.map((j) => j._id === selectedJob._id ? { ...j, status: "ClientConfirmed" } : j))
+      setSelectedJob((prev) => prev ? { ...prev, status: "ClientConfirmed" } : prev)
+    } catch {
+      toast.error("Failed to confirm job")
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  const openJobModal = (job: Job) => {
+    setSelectedJob(job)
+    setJobModalOpen(true)
   }
 
   const fetchJobs = () => {
@@ -210,6 +254,13 @@ export default function ClientDashboardPage() {
         prevPendingIds.current = new Set(
           newJobs.filter((j) => j.status === "Pending").map((j) => j._id)
         )
+
+        // Keep modal in sync with latest data
+        setSelectedJob((prev) => {
+          if (!prev) return prev
+          const updated = newJobs.find((j) => j._id === prev._id)
+          return updated || prev
+        })
       })
       .catch(() => { })
       .finally(() => setLoading(false))
@@ -290,52 +341,33 @@ export default function ClientDashboardPage() {
         ) : (
           <div className="space-y-3">
             {activeJobs.map((job) => {
-              const isPending = job.status === "Pending"
-              const href = isPending ? `/client/job/${job._id}` : `/client/chats/${job._id}`
               const workerName =
                 typeof job.workerId === "object" && job.workerId?.name
                   ? job.workerId.name
                   : null
               return (
-                <Link key={job._id} href={href}>
-                  <div className="rounded-xl border bg-card p-4 hover:border-primary/30 transition-colors">
-                    <div className="flex items-start justify-between mb-2">
-                      <p className="font-medium text-sm">
-                        {job.title || job.description.slice(0, 50)}
-                      </p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[job.status] || "bg-muted"}`}>
-                        {statusLabel[job.status] || job.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      {job.category && (
-                        <p className="text-xs text-muted-foreground">{job.category}</p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        {!isPending && (
-                          <span className="text-xs text-primary flex items-center gap-1">
-                            <MessageCircle className="h-3 w-3" />
-                            {workerName ? `Chat with ${workerName}` : "Open chat"}
-                          </span>
-                        )}
-                        {(job.status === "Pending" || job.status === "Accepted") && (
-                          <button
-                            onClick={(e) => handleCancel(job._id, e)}
-                            disabled={cancelling === job._id}
-                            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5"
-                          >
-                            {cancelling === job._id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <XCircle className="h-3 w-3" />
-                            )}
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                <button
+                  key={job._id}
+                  onClick={() => openJobModal(job)}
+                  className="w-full text-left rounded-xl border bg-card p-4 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <p className="font-medium text-sm">
+                      {job.title || job.description.slice(0, 50)}
+                    </p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[job.status] || "bg-muted"}`}>
+                      {statusLabel[job.status] || job.status}
+                    </span>
                   </div>
-                </Link>
+                  <div className="flex items-center justify-between">
+                    {job.category && (
+                      <p className="text-xs text-muted-foreground">{job.category}</p>
+                    )}
+                    {workerName && (
+                      <p className="text-xs text-muted-foreground">Worker: {workerName}</p>
+                    )}
+                  </div>
+                </button>
               )
             })}
           </div>
@@ -401,6 +433,129 @@ export default function ClientDashboardPage() {
           </div>
         )}
       </section>
+
+      {/* Job Detail Modal */}
+      <Dialog open={jobModalOpen} onOpenChange={(open) => {
+        setJobModalOpen(open)
+        if (!open) setSelectedJob(null)
+      }}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedJob?.title || "Service Request"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedJob && (() => {
+            const workerName =
+              typeof selectedJob.workerId === "object" && selectedJob.workerId?.name
+                ? selectedJob.workerId.name
+                : null
+            const currentStepIdx = clientStatusSteps.findIndex(
+              (s) => s.key === selectedJob.status
+            )
+
+            return (
+              <div className="space-y-4">
+                {selectedJob.category && (
+                  <p className="text-sm text-muted-foreground">{selectedJob.category}</p>
+                )}
+
+                <div className="rounded-xl bg-muted/50 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Description</p>
+                  <p className="text-sm leading-relaxed">{selectedJob.description}</p>
+                </div>
+
+                {workerName && (
+                  <p className="text-sm text-muted-foreground">Worker: <span className="font-medium text-foreground">{workerName}</span></p>
+                )}
+
+                {/* Status Timeline */}
+                {selectedJob.status !== "Pending" && (
+                  <div className="flex gap-1.5">
+                    {clientStatusSteps.map((step, i) => {
+                      const isCurrent = i === currentStepIdx
+                      const isActive = i <= currentStepIdx
+                      const isConfirmed = step.key === "ClientConfirmed" && selectedJob.status === "ClientConfirmed"
+                      const showShimmer = isCurrent && !isConfirmed
+                      const Icon = isConfirmed ? CheckCircle : (clientStepIcons[step.key] || Briefcase)
+                      return (
+                        <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className={`h-2 w-full rounded-full ${
+                              isConfirmed ? "bg-green-500" : isActive && !isCurrent ? "bg-primary" : !isActive ? "bg-muted" : ""
+                            }`}
+                            style={
+                              showShimmer
+                                ? {
+                                    background:
+                                      "linear-gradient(90deg, var(--primary) 0%, var(--primary) 30%, color-mix(in srgb, var(--primary), white 40%) 50%, var(--primary) 70%, var(--primary) 100%)",
+                                    backgroundSize: "200% 100%",
+                                    animation: "progress-shimmer 2s ease-in-out infinite, progress-pulse 2s ease-in-out infinite",
+                                  }
+                                : undefined
+                            }
+                          />
+                          <div className={`flex flex-col items-center gap-0.5 ${
+                            isConfirmed ? "text-green-600" : isCurrent ? "text-primary" : isActive ? "text-primary/70" : "text-muted-foreground/50"
+                          }`}>
+                            <Icon className={`h-3 w-3 ${isCurrent && step.key === "InProgress" ? "animate-spin" : ""}`} />
+                            <span className={`text-[9px] leading-tight text-center ${isCurrent ? "font-semibold" : "font-normal"}`}>
+                              {isConfirmed ? "Done" : step.label}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  {selectedJob.status === "InProgress" && (
+                    <Button
+                      className="flex-1 rounded-xl"
+                      onClick={handleConfirmDone}
+                      disabled={confirming}
+                    >
+                      {confirming ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Confirm Done
+                    </Button>
+                  )}
+
+                  {selectedJob.status === "Pending" && (
+                    <Button
+                      variant="destructive"
+                      className="flex-1 rounded-xl"
+                      onClick={() => handleCancel(selectedJob._id)}
+                      disabled={cancelling === selectedJob._id}
+                    >
+                      {cancelling === selectedJob._id ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Cancel Request
+                    </Button>
+                  )}
+
+                  {selectedJob.status !== "Pending" && selectedJob.status !== "Cancelled" && selectedJob.status !== "Declined" && (
+                    <Link href={`/client/chats/${selectedJob._id}`} className="flex-1">
+                      <Button variant="outline" className="w-full rounded-xl">
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Chat
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

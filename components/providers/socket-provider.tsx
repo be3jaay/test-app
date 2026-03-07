@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { TokenStorage } from "@/services/token-storage";
@@ -33,10 +34,16 @@ function buildToastMessage(name: string, rating?: number | null, description?: s
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
+  const pathname = usePathname();
+  const [token, setToken] = useState<string | null>(null);
+
+  // Re-check token on every route change (catches login/logout)
+  useEffect(() => {
+    const current = TokenStorage.getAccessToken();
+    setToken(current);
+  }, [pathname]);
 
   useEffect(() => {
-    const token = TokenStorage.getAccessToken();
-
     // Only connect for logged-in users with a token
     if (!token) return;
 
@@ -90,8 +97,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     const statusMessages: Record<string, string> = {
       OnTheWay: "Your worker is on the way!",
       Arrived: "Your worker has arrived.",
-      InProgress: "Work is now in progress.",
-      WorkDone: "The worker marked the job as done. Please confirm.",
+      InProgress: "Work is now in progress. You can confirm when done.",
     };
 
     socket.on("job_status_update", (data: { jobId: string; status: string }) => {
@@ -147,6 +153,30 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
+    // --- Chat message notifications ---
+
+    socket.on("message_notification", (data: { jobId: string; message: { senderId?: { email?: string }; content?: string } }) => {
+      // Don't show toast if already viewing this chat
+      const onChatPage =
+        window.location.pathname.includes(`/client/chats/${data.jobId}`) ||
+        window.location.pathname.includes(`/worker/chats/${data.jobId}`);
+      if (onChatPage) return;
+
+      const senderName = data.message?.senderId?.email?.split("@")[0] || "Someone";
+      const preview = data.message?.content?.slice(0, 60) || "New message";
+      toast.info(`${senderName}: ${preview}`, {
+        action: {
+          label: "Open Chat",
+          onClick: () => {
+            window.location.href = window.location.pathname.includes("/worker")
+              ? `/worker/chats/${data.jobId}`
+              : `/client/chats/${data.jobId}`;
+          },
+        },
+        duration: 6000,
+      });
+    });
+
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err.message);
     });
@@ -155,7 +185,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [token]);
 
   return <>{children}</>;
 }

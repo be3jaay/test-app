@@ -35,7 +35,6 @@ const statusColor: Record<string, string> = {
   OnTheWay: "bg-blue-100 text-blue-700",
   Arrived: "bg-blue-100 text-blue-700",
   InProgress: "bg-purple-100 text-purple-700",
-  WorkDone: "bg-green-100 text-green-700",
   ClientConfirmed: "bg-green-100 text-green-700",
   Completed: "bg-green-100 text-green-700",
   Cancelled: "bg-red-100 text-red-700",
@@ -47,8 +46,7 @@ const statusLabel: Record<string, string> = {
   OnTheWay: "On the way",
   Arrived: "Arrived",
   InProgress: "In progress",
-  WorkDone: "Work done",
-  ClientConfirmed: "Confirmed",
+  ClientConfirmed: "Client confirmed",
   Completed: "Completed",
   Cancelled: "Cancelled",
 }

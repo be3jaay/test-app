@@ -18,7 +18,6 @@ import {
   Loader2,
   MapPin,
   Navigation,
-  Flag,
   Bell,
   XCircle,
 } from "lucide-react"
@@ -37,8 +36,8 @@ const statusSteps = [
   { key: "Accepted", label: "Accepted", next: "OnTheWay" },
   { key: "OnTheWay", label: "On the way", next: "Arrived" },
   { key: "Arrived", label: "I'm here", next: "InProgress" },
-  { key: "InProgress", label: "In progress", next: "WorkDone" },
-  { key: "WorkDone", label: "Job Done", next: null },
+  { key: "InProgress", label: "In progress", next: null },
+  { key: "ClientConfirmed", label: "Client confirmed", next: "Completed" },
 ]
 
 const stepIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -46,7 +45,7 @@ const stepIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   OnTheWay: Navigation,
   Arrived: MapPin,
   InProgress: Loader2,
-  WorkDone: Flag,
+  ClientConfirmed: CheckCircle,
 }
 
 export default function WorkerDashboardPage() {
@@ -135,10 +134,10 @@ export default function WorkerDashboardPage() {
   }
 
   const activeJobs = jobs.filter(
-    (j) => !["Completed", "Declined", "ClientConfirmed", "Pending"].includes(j.status)
+    (j) => !["Completed", "Declined", "Cancelled", "Pending"].includes(j.status)
   )
   const completedJobs = jobs.filter((j) =>
-    ["Completed", "ClientConfirmed"].includes(j.status)
+    ["Completed"].includes(j.status)
   )
 
   const handleAdvanceStatus = async (jobId: string, nextStatus: string) => {
@@ -260,7 +259,7 @@ export default function WorkerDashboardPage() {
                     {statusSteps.map((step, i) => {
                       const isCurrent = i === currentStepIdx
                       const isActive = i <= currentStepIdx
-                      const isLastStep = step.key === "WorkDone"
+                      const isLastStep = step.key === "ClientConfirmed" && job.status === "ClientConfirmed"
                       const isFinished = isCurrent && isLastStep
                       const showShimmer = isCurrent && !isFinished
                       const Icon = isFinished ? CheckCircle : (stepIcons[step.key] || Briefcase)
@@ -294,9 +293,11 @@ export default function WorkerDashboardPage() {
                     })}
                   </div>
                   <div className="flex items-center justify-end">
-                    <p className="sr-only">
-                      {currentStep?.label || job.status}
-                    </p>
+                    {job.status === "InProgress" && (
+                      <p className="text-xs text-muted-foreground mr-auto">
+                        Waiting for client to confirm...
+                      </p>
+                    )}
                     {currentStep?.next && (
                       <Button
                         size="sm"
@@ -315,7 +316,7 @@ export default function WorkerDashboardPage() {
                             ? "I'm here"
                             : currentStep.next === "InProgress"
                               ? "Start work"
-                              : "Job Done"}
+                              : "Mark Complete"}
                       </Button>
                     )}
                   </div>

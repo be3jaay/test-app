@@ -26,8 +26,7 @@ const statusLabel: Record<string, string> = {
   Accepted: "Accepted",
   OnTheWay: "Worker on the way",
   Arrived: "Worker arrived",
-  InProgress: "In progress",
-  WorkDone: "Work done — please confirm",
+  InProgress: "In progress — confirm when done",
   ClientConfirmed: "Confirmed",
   Completed: "Completed",
   Declined: "Declined",
@@ -161,7 +160,7 @@ export default function ClientJobDetailPage() {
               </Link>
             )}
 
-            {job.status === "WorkDone" && (
+            {job.status === "InProgress" && (
               <Button
                 className="flex-1 rounded-xl"
                 onClick={handleConfirm}
@@ -176,7 +175,7 @@ export default function ClientJobDetailPage() {
               </Button>
             )}
 
-            {(job.status === "Pending" || job.status === "Accepted") && (
+            {job.status === "Pending" && (
               <Button
                 variant="destructive"
                 className="flex-1 rounded-xl"
