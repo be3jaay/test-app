@@ -59,6 +59,7 @@ export function LoginForm({
           const role = response.role ?? TRole.CLIENT
           TokenStorage.setRole(role)
           TokenStorage.setHasCompleted(response.has_completed)
+          if (response.userId) TokenStorage.setUserId(response.userId)
           const nextPath =
             response.has_completed === false
               ? "/onboarding"

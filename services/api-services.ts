@@ -28,11 +28,12 @@ class ApiService {
     return data;
   }
 
-  /** GET that normalizes response to an array — handles both flat arrays and { data: [...] } */
+  /** GET that normalizes response to an array — handles { data: [...] }, { messages: [...] }, and flat arrays */
   static async getArray<T>(url: string, params?: Record<string, any>): Promise<T[]> {
     const { data } = await apiClient.get(url, { params });
     if (Array.isArray(data)) return data;
     if (data && Array.isArray(data.data)) return data.data;
+    if (data && Array.isArray(data.messages)) return data.messages;
     return [];
   }
 }

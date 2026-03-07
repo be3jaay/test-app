@@ -2,9 +2,12 @@ export const ACCESS_TOKEN_COOKIE = "access_token";
 export const USER_ROLE_COOKIE = "user_role";
 export const HAS_COMPLETED_COOKIE = "has_completed";
 
+const USER_ID_COOKIE = "user_id";
+
 const ACCESS_TOKEN_KEY = ACCESS_TOKEN_COOKIE;
 const USER_ROLE_KEY = USER_ROLE_COOKIE;
 const HAS_COMPLETED_KEY = HAS_COMPLETED_COOKIE;
+const USER_ID_KEY = USER_ID_COOKIE;
 const COOKIE_MAX_AGE_DAYS = 7;
 
 function setCookie(name: string, value: string): void {
@@ -86,9 +89,27 @@ export class TokenStorage {
     removeCookie(HAS_COMPLETED_KEY);
   }
 
+  public static getUserId(): string | null {
+    if (typeof window === "undefined") return null;
+    return getCookie(USER_ID_KEY) ?? localStorage.getItem(USER_ID_KEY);
+  }
+
+  public static setUserId(id: string): void | null {
+    if (typeof window === "undefined") return null;
+    localStorage.setItem(USER_ID_KEY, id);
+    setCookie(USER_ID_KEY, id);
+  }
+
+  public static removeUserId(): void | null {
+    if (typeof window === "undefined") return null;
+    localStorage.removeItem(USER_ID_KEY);
+    removeCookie(USER_ID_KEY);
+  }
+
   public static clear(): void {
     TokenStorage.removeAccessToken();
     TokenStorage.removeRole();
     TokenStorage.removeHasCompleted();
+    TokenStorage.removeUserId();
   }
 }
