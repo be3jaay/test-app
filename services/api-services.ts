@@ -27,6 +27,14 @@ class ApiService {
     const { data } = await apiClient.patch<T>(url, body);
     return data;
   }
+
+  /** GET that normalizes response to an array — handles both flat arrays and { data: [...] } */
+  static async getArray<T>(url: string, params?: Record<string, any>): Promise<T[]> {
+    const { data } = await apiClient.get(url, { params });
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.data)) return data.data;
+    return [];
+  }
 }
 
 export default ApiService;

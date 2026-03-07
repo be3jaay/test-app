@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { TokenStorage } from "@/services/token-storage"
+import ApiService from "@/services/api-services"
 
 const clientSchema = yup.object({
   name: yup.string().required("Name is required"),
@@ -34,12 +35,21 @@ export function ClientOnboarding() {
     defaultValues: { name: "", phone: "", location: "" },
   })
 
-  function onSubmit(data: ClientOnboardingData) {
-    // TODO: call API to save onboarding data when backend is ready
-    console.log("Client onboarding:", data)
-    TokenStorage.setHasCompleted(true)
-    toast.success("Profile updated!")
-    router.replace("/client/dashboard")
+  async function onSubmit(data: ClientOnboardingData) {
+    try {
+      await ApiService.post("/auth/onboarding", {
+        name: data.name,
+        phone: data.phone,
+        location: data.location,
+        skills: [],
+        serviceDescription: "",
+      })
+      TokenStorage.setHasCompleted(true)
+      toast.success("Profile updated!")
+      router.replace("/client/dashboard")
+    } catch {
+      toast.error("Failed to save profile. Please try again.")
+    }
   }
 
   return (

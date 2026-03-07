@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { WorkerStep1 } from './worker-steps/worker-step1'
 import { WorkerStep2 } from './worker-steps/worker-step2'
 import { WorkerStep3 } from './worker-steps/worker-step3'
 import { WorkerSuccess } from './worker-steps/worker-success'
+import { TokenStorage } from '@/services/token-storage'
 import services from '@/services/services'
 
 type Step = 'step1' | 'step2' | 'step3' | 'success'
@@ -18,6 +20,7 @@ interface OnboardingData {
 }
 
 export function WorkerOnboarding() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = useState<Step>('step1')
   const [data, setData] = useState<Partial<OnboardingData>>({})
 
@@ -57,8 +60,8 @@ export function WorkerOnboarding() {
   }
 
   const handleSuccess = () => {
-    // Redirect to dashboard or home page
-    console.log('Redirecting to worker dashboard...')
+    TokenStorage.setHasCompleted(true)
+    router.replace('/worker/dashboard')
   }
 
   return (

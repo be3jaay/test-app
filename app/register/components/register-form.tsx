@@ -1,6 +1,6 @@
 "use client"
 
-import { GalleryVerticalEnd } from "lucide-react"
+import { KitaLogo } from "@/components/kita-logo"
 import { usePathname, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
@@ -87,15 +87,7 @@ export function RegisterForm({
       <form onSubmit={handleSubmit(onSubmit)}>
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
-            <a
-              href="#"
-              className="flex flex-col items-center gap-2 font-medium"
-            >
-              <div className="flex size-8 items-center justify-center rounded-md">
-                <GalleryVerticalEnd className="size-6" />
-              </div>
-              <span className="sr-only">Acme Inc.</span>
-            </a>
+            <KitaLogo className="size-10" />
             <h1 className="text-xl font-bold">Create your account</h1>
             <FieldDescription>
               Already have an account? <a href="/login">Sign in</a>

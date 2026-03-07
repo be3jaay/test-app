@@ -1,8 +1,6 @@
 import { TRegisterData } from "./types";
 import ApiService from "../api-services";
 
-const API_BASE = "https://code-camp-hackathon-be.onrender.com/api";
-
 /** Signup API may return { success, data: { token, role, has_completed } } or flat */
 export type RegisterApiResponse =
   | {
@@ -20,7 +18,7 @@ export type RegisterResponse = {
 async function register(data: TRegisterData): Promise<RegisterResponse> {
   try {
     const response = await ApiService.post<RegisterApiResponse>(
-      `${API_BASE}/auth/signup`,
+      "/auth/signup",
       {
         email: data.email,
         password: data.password,
@@ -64,7 +62,7 @@ export type LoginResponse = {
 async function login(email: string, password: string): Promise<LoginResponse> {
   try {
     const response = await ApiService.post<LoginApiResponse>(
-      `${API_BASE}/auth/login`,
+      "/auth/login",
       {
         email,
         password,
