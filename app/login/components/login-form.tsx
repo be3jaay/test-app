@@ -1,11 +1,12 @@
 "use client"
 
 import { GalleryVerticalEnd } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
 import { yupResolver } from "@hookform/resolvers/yup"
 import * as yup from "yup"
+import { useEffect } from "react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -33,14 +34,21 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const pathname = usePathname()
   const {
     register: registerField,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: yupResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   })
+
+  // Reset form when landing on login (e.g. after logout) so submit and API work again
+  useEffect(() => {
+    if (pathname === "/login") reset({ email: "", password: "" })
+  }, [pathname, reset])
 
   async function onSubmit(data: LoginFormData) {
     return toast.promise(login(data.email, data.password), {
@@ -50,8 +58,14 @@ export function LoginForm({
           TokenStorage.setAccessToken(response.access_token)
           const role = response.role ?? TRole.CLIENT
           TokenStorage.setRole(role)
-          const dashboardPath = role === TRole.WORKER ? "/worker/dashboard" : "/client/dashboard"
-          setTimeout(() => router.push(dashboardPath), 500)
+          TokenStorage.setHasCompleted(response.has_completed)
+          const nextPath =
+            response.has_completed === false
+              ? "/onboarding"
+              : role === TRole.WORKER
+                ? "/worker/dashboard"
+                : "/client/dashboard"
+          setTimeout(() => router.replace(nextPath), 500)
         }
         return "Signed in! Redirecting..."
       },

@@ -1,8 +1,10 @@
 export const ACCESS_TOKEN_COOKIE = "access_token";
 export const USER_ROLE_COOKIE = "user_role";
+export const HAS_COMPLETED_COOKIE = "has_completed";
 
 const ACCESS_TOKEN_KEY = ACCESS_TOKEN_COOKIE;
 const USER_ROLE_KEY = USER_ROLE_COOKIE;
+const HAS_COMPLETED_KEY = HAS_COMPLETED_COOKIE;
 const COOKIE_MAX_AGE_DAYS = 7;
 
 function setCookie(name: string, value: string): void {
@@ -65,8 +67,28 @@ export class TokenStorage {
     removeCookie(USER_ROLE_KEY);
   }
 
+  public static getHasCompleted(): boolean {
+    if (typeof window === "undefined") return true;
+    const v = getCookie(HAS_COMPLETED_KEY) ?? localStorage.getItem(HAS_COMPLETED_KEY);
+    return v === "true";
+  }
+
+  public static setHasCompleted(completed: boolean): void | null {
+    if (typeof window === "undefined") return null;
+    const v = completed ? "true" : "false";
+    localStorage.setItem(HAS_COMPLETED_KEY, v);
+    setCookie(HAS_COMPLETED_KEY, v);
+  }
+
+  public static removeHasCompleted(): void | null {
+    if (typeof window === "undefined") return null;
+    localStorage.removeItem(HAS_COMPLETED_KEY);
+    removeCookie(HAS_COMPLETED_KEY);
+  }
+
   public static clear(): void {
     TokenStorage.removeAccessToken();
     TokenStorage.removeRole();
+    TokenStorage.removeHasCompleted();
   }
 }

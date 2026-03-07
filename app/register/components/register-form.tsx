@@ -1,11 +1,12 @@
 "use client"
 
 import { GalleryVerticalEnd } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
 import { yupResolver } from "@hookform/resolvers/yup"
 import * as yup from "yup"
+import { useEffect } from "react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -35,9 +36,11 @@ export function RegisterForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const pathname = usePathname()
   const {
     register: registerField,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<TRegisterData>({
     resolver: yupResolver(registerSchema),
@@ -48,16 +51,29 @@ export function RegisterForm({
     },
   })
 
+  // Reset form when landing on register (e.g. after logout) so submit and API work again
+  useEffect(() => {
+    if (pathname === "/register") {
+      reset({ email: "", password: "", role: TRole.CLIENT })
+    }
+  }, [pathname, reset])
+
   async function onSubmit(data: TRegisterData) {
     return toast.promise(register(data), {
       loading: "Creating your account...",
       success: (response) => {
         if (response?.access_token) {
           TokenStorage.setAccessToken(response.access_token)
-          TokenStorage.setRole(data.role)
+          TokenStorage.setRole(response.role ?? data.role)
+          TokenStorage.setHasCompleted(response.has_completed)
         }
-        const dashboardPath = data.role === TRole.WORKER ? "/worker/dashboard" : "/client/dashboard"
-        setTimeout(() => router.push(dashboardPath), 1000)
+        const nextPath =
+          response?.has_completed === false
+            ? "/onboarding"
+            : data.role === TRole.WORKER
+              ? "/worker/dashboard"
+              : "/client/dashboard"
+        setTimeout(() => router.replace(nextPath), 1000)
         return "Account created successfully! Redirecting..."
       },
       error: (error) => {

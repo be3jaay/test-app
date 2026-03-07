@@ -1,7 +1,7 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { createContext, useCallback, useContext, useEffect, useState, useRef } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { TokenStorage } from "@/services/token-storage"
 import { TRole } from "@/services/auth/types"
 
@@ -20,12 +20,15 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const isMountedRef = useRef(false)
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     role: null,
     isLoading: true,
   })
 
+  // Initialize auth state on mount to prevent hydration mismatch
   useEffect(() => {
     const token = TokenStorage.getAccessToken()
     const role = TokenStorage.getRole()
@@ -34,7 +37,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role,
       isLoading: false,
     })
+    isMountedRef.current = true
   }, [])
+
+  // Re-sync auth state from storage whenever route changes (e.g. after login redirect)
+  useEffect(() => {
+    if (!isMountedRef.current) return
+    const token = TokenStorage.getAccessToken()
+    const role = TokenStorage.getRole()
+    setState({
+      isAuthenticated: !!token,
+      role,
+      isLoading: false,
+    })
+  }, [pathname])
 
   const logout = useCallback(() => {
     TokenStorage.clear()
