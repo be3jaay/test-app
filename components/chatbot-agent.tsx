@@ -3,16 +3,79 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Mic, MicOff, Send, Bot } from 'lucide-react'
+import { Mic, MicOff, Send, Bot, X } from 'lucide-react'
 
-export function ChatbotAgent() {
+export function ChatbotAgent({ onClose }: { onClose: () => void }) {
     const [input, setInput] = useState('')
     const [logs, setLogs] = useState<string[]>([])
     const [status, setStatus] = useState('Idle')
     const [isListening, setIsListening] = useState(false)
+    const [isSpeaking, setIsSpeaking] = useState(false)
 
     const recognitionRef = useRef<any>(null)
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const ttsQueueRef = useRef<string[]>([])
+    const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
+    const isPlayingTtsRef = useRef(false)
+
+    const playTtsQueue = useCallback(async () => {
+        if (isPlayingTtsRef.current || ttsQueueRef.current.length === 0) return
+        const text = ttsQueueRef.current.shift()
+        if (!text) return
+
+        recognitionRef.current?.stop()
+        setIsListening(false)
+        isPlayingTtsRef.current = true
+        setIsSpeaking(true)
+        setStatus('Speaking...')
+
+        try {
+            const res = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                throw new Error((err as { error?: string }).error ?? `TTS failed: ${res.status}`)
+            }
+            const result = (await res.json()) as { audioContent?: string }
+            if (!result.audioContent) throw new Error('No audio in TTS response')
+
+            const audioBuffer = Uint8Array.from(atob(result.audioContent), (c) => c.charCodeAt(0))
+            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+            const url = URL.createObjectURL(blob)
+
+            const audio = new Audio(url)
+            ttsAudioRef.current = audio
+            audio.onended = () => {
+                URL.revokeObjectURL(url)
+                ttsAudioRef.current = null
+                isPlayingTtsRef.current = false
+                setIsSpeaking(false)
+                if (ttsQueueRef.current.length > 0) {
+                    setStatus('Speaking...')
+                    playTtsQueue()
+                } else {
+                    setStatus('Task complete')
+                }
+            }
+            audio.onerror = () => {
+                URL.revokeObjectURL(url)
+                isPlayingTtsRef.current = false
+                setIsSpeaking(false)
+                if (ttsQueueRef.current.length > 0) playTtsQueue()
+                else setStatus('Task complete')
+            }
+            await audio.play()
+        } catch (err) {
+            console.error('TTS error:', err)
+            isPlayingTtsRef.current = false
+            setIsSpeaking(false)
+            if (ttsQueueRef.current.length > 0) playTtsQueue()
+            else setStatus('Task complete')
+        }
+    }, [])
 
     useEffect(() => {
         const SpeechRecognition =
@@ -37,7 +100,16 @@ export function ChatbotAgent() {
 
         recognitionRef.current = recognition
 
-        return () => recognition.stop()
+        return () => {
+            recognition.stop()
+            if (ttsAudioRef.current) {
+                ttsAudioRef.current.pause()
+                ttsAudioRef.current.currentTime = 0
+                ttsAudioRef.current = null
+            }
+            ttsQueueRef.current = []
+            isPlayingTtsRef.current = false
+        }
     }, [])
 
     const sendMessage = useCallback(() => {
@@ -61,9 +133,18 @@ export function ChatbotAgent() {
 
         setTimeout(() => {
             setLogs((prev) => [...prev, `[Agent] Found 3 workers near your location.`])
-            setStatus('Task complete')
+            setStatus('Speaking...')
+            const mockAgentLines = [
+                'Analyzing problem...',
+                'Searching nearby workers...',
+                'Found 3 workers near your location.',
+            ]
+            isPlayingTtsRef.current = false
+            ttsQueueRef.current = []
+            mockAgentLines.forEach((line) => ttsQueueRef.current.push(line))
+            playTtsQueue()
         }, 2000)
-    }, [input])
+    }, [input, playTtsQueue])
 
     useEffect(() => {
         if (isListening && input.trim().length > 0) {
@@ -91,22 +172,40 @@ export function ChatbotAgent() {
         recognitionRef.current?.stop()
         setIsListening(false)
         setStatus('Idle')
-
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+        if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause()
+            ttsAudioRef.current.currentTime = 0
+            ttsAudioRef.current = null
+        }
+        ttsQueueRef.current = []
+        isPlayingTtsRef.current = false
+        setIsSpeaking(false)
     }
 
     return (
         <div className="flex flex-col h-full bg-background">
 
             {/* Agent Header */}
-            <div className="border-b p-4 flex items-center gap-3">
-                <Bot className="w-6 h-6 text-primary" />
-                <div>
-                    <h2 className="font-semibold">Denki Agent</h2>
-                    <p className="text-xs text-muted-foreground">
-                        Autonomous Worker Finder
-                    </p>
+            <div className="border-b p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <Bot className="w-6 h-6 text-primary" />
+                    <div>
+                        <h2 className="font-semibold">Denki Agent</h2>
+                        <p className="text-xs text-muted-foreground">
+                            Autonomous Worker Finder
+                        </p>
+                    </div>
                 </div>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    aria-label="Close chatbot agent"
+                >
+                    <X className="h-5 w-5" />
+                </Button>
             </div>
 
             {/* Agent Status */}
