@@ -3,6 +3,7 @@
 import { useRequireAuth } from "@/components/providers/auth-provider"
 import { TRole } from "@/services/auth/types"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Suspense, useEffect, useState } from "react"
@@ -40,6 +41,7 @@ function BookingForm() {
   const [worker, setWorker] = useState<WorkerProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [description, setDescription] = useState("")
+  const [price, setPrice] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
@@ -82,11 +84,17 @@ function BookingForm() {
       toast.error("Please describe what you need")
       return
     }
+    const parsedPrice = parseFloat(price)
+    if (!price.trim() || isNaN(parsedPrice) || parsedPrice <= 0) {
+      toast.error("Please enter a valid price")
+      return
+    }
     setSubmitting(true)
     try {
       await ApiService.post("/jobs", {
         description: description.trim(),
         workerId: workerId,
+        price: parsedPrice,
       })
       setSubmitted(true)
       toast.success("Booking request sent!")
@@ -216,6 +224,21 @@ function BookingForm() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="rounded-xl min-h-[120px]"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">
+            Budget (₱)
+          </label>
+          <Input
+            type="number"
+            min="1"
+            step="any"
+            placeholder="Enter your budget"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="rounded-xl"
           />
         </div>
 

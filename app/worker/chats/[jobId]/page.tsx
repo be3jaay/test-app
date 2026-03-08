@@ -8,8 +8,9 @@ import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
 import { TokenStorage } from "@/services/token-storage"
-import { Loader2, ArrowLeft, Send } from "lucide-react"
+import { Loader2, ArrowLeft, Send, Navigation, MapPin, Camera, CheckCircle } from "lucide-react"
 import { PaymentReleaseCard } from "@/components/payment-release-card"
+import { toast } from "sonner"
 
 type Message = {
   _id: string
@@ -18,6 +19,13 @@ type Message = {
   content: string
   createdAt: string
 }
+
+const workerStatusFlow: { from: string; to: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { from: "Accepted", to: "OnTheWay", label: "On the way", icon: Navigation },
+  { from: "OnTheWay", to: "Arrived", label: "I'm here", icon: MapPin },
+  { from: "Arrived", to: "InProgress", label: "Start work", icon: Camera },
+  { from: "InProgress", to: "Completed", label: "Mark complete", icon: CheckCircle },
+]
 
 export default function WorkerChatRoomPage() {
   const { isAuthenticated, isLoading } = useRequireAuth([TRole.WORKER])
@@ -29,24 +37,55 @@ export default function WorkerChatRoomPage() {
   const [sending, setSending] = useState(false)
   const [jobStatus, setJobStatus] = useState<string>("")
   const [jobTitle, setJobTitle] = useState<string>("")
+  const [jobPrice, setJobPrice] = useState<number>(0)
+  const [paymentStatus, setPaymentStatus] = useState<string>("Unpaid")
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = () => {
     if (!params.jobId) return
     ApiService.getArray<Message>(`/chat/${params.jobId}/messages`)
       .then((res) => setMessages(res))
-      .catch(() => {})
+      .catch((err) => console.error("Failed to fetch messages:", err))
       .finally(() => setLoading(false))
   }
 
   const fetchJobStatus = () => {
     if (!params.jobId) return
-    ApiService.get<{ status: string; title?: string; description?: string }>(`/jobs/${params.jobId}`)
-      .then((job) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ApiService.get<any>(`/jobs/${params.jobId}`)
+      .then((res) => {
+        const job = res?.data ?? res
         setJobStatus(job.status)
         setJobTitle(job.title || job.description || "Service")
+        setJobPrice(job.price || 0)
+        setPaymentStatus(job.paymentStatus || "Unpaid")
       })
-      .catch(() => {})
+      .catch((err) => console.error("Failed to fetch job status:", err))
+  }
+
+  const handleUpdateStatus = async (nextStatus: string) => {
+    if (!params.jobId) return
+    setUpdatingStatus(true)
+    try {
+      await ApiService.patch(`/jobs/${params.jobId}/status`, { status: nextStatus })
+      const statusMessages: Record<string, string> = {
+        OnTheWay: "🚗 Worker is on the way!",
+        Arrived: "📍 Worker has arrived!",
+        InProgress: "🔧 Work has started!",
+        Completed: "✅ Work has been completed!",
+      }
+      await ApiService.post(`/chat/${params.jobId}/messages`, {
+        content: statusMessages[nextStatus] || `Status updated to ${nextStatus}`,
+      }).catch(() => {})
+      setJobStatus(nextStatus)
+      toast.success(`Status updated to ${nextStatus}`)
+      fetchMessages()
+    } catch {
+      toast.error("Failed to update status")
+    } finally {
+      setUpdatingStatus(false)
+    }
   }
 
   useEffect(() => {
@@ -134,14 +173,37 @@ export default function WorkerChatRoomPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Payment Release Card */}
-      {(jobStatus === "ClientConfirmed" || jobStatus === "Completed") && (
+      {/* Worker Status Update Button */}
+      {(() => {
+        const nextStep = workerStatusFlow.find((s) => s.from === jobStatus)
+        if (!nextStep) return null
+        const Icon = nextStep.icon
+        return (
+          <div className="px-4 py-3 border-t">
+            <Button
+              className="w-full rounded-xl"
+              onClick={() => handleUpdateStatus(nextStep.to)}
+              disabled={updatingStatus}
+            >
+              {updatingStatus ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Icon className="h-4 w-4 mr-2" />
+              )}
+              {updatingStatus ? "Updating..." : nextStep.label}
+            </Button>
+          </div>
+        )
+      })()}
+
+      {/* Payment Release Card - Worker view */}
+      {(paymentStatus === "Escrowed" || paymentStatus === "Released") && (jobStatus === "ClientConfirmed" || jobStatus === "Completed") && (
         <div className="px-4 py-3 border-t">
           <PaymentReleaseCard
             jobTitle={jobTitle}
-            amount={500}
+            amount={jobPrice}
             role="worker"
-            released={jobStatus === "Completed"}
+            released={paymentStatus === "Released"}
           />
         </div>
       )}

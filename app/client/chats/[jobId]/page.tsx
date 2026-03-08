@@ -8,7 +8,7 @@ import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
 import { TokenStorage } from "@/services/token-storage"
-import { Loader2, ArrowLeft, Send } from "lucide-react"
+import { Loader2, ArrowLeft, Send, Lock, Wallet } from "lucide-react"
 import { PaymentReleaseCard } from "@/components/payment-release-card"
 import { toast } from "sonner"
 
@@ -30,38 +30,65 @@ export default function ClientChatRoomPage() {
   const [sending, setSending] = useState(false)
   const [jobStatus, setJobStatus] = useState<string>("")
   const [jobTitle, setJobTitle] = useState<string>("")
+  const [jobPrice, setJobPrice] = useState<number>(0)
+  const [paymentStatus, setPaymentStatus] = useState<string>("Unpaid")
   const [releasing, setReleasing] = useState(false)
+  const [escrowing, setEscrowing] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = () => {
     if (!params.jobId) return
     ApiService.getArray<Message>(`/chat/${params.jobId}/messages`)
       .then((res) => setMessages(res))
-      .catch(() => {})
+      .catch((err) => console.error("Failed to fetch messages:", err))
       .finally(() => setLoading(false))
   }
 
   const fetchJobStatus = () => {
     if (!params.jobId) return
-    ApiService.get<{ status: string; title?: string; description?: string }>(`/jobs/${params.jobId}`)
-      .then((job) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ApiService.get<any>(`/jobs/${params.jobId}`)
+      .then((res) => {
+        const job = res?.data ?? res
         setJobStatus(job.status)
         setJobTitle(job.title || job.description || "Service")
+        setJobPrice(job.price || 0)
+        setPaymentStatus(job.paymentStatus || "Unpaid")
       })
-      .catch(() => {})
+      .catch((err) => console.error("Failed to fetch job status:", err))
+  }
+
+  const handleEscrowPayment = async () => {
+    if (!params.jobId) return
+    setEscrowing(true)
+    try {
+      await ApiService.patch(`/jobs/${params.jobId}/escrow`, {})
+      await ApiService.post(`/chat/${params.jobId}/messages`, {
+        content: "🔒 Payment has been escrowed. Funds are now locked securely.",
+      }).catch(() => {})
+      setPaymentStatus("Escrowed")
+      toast.success("Payment escrowed successfully!")
+      fetchMessages()
+      fetchJobStatus()
+    } catch {
+      toast.error("Failed to escrow payment")
+    } finally {
+      setEscrowing(false)
+    }
   }
 
   const handleReleasePayment = async () => {
     if (!params.jobId) return
     setReleasing(true)
     try {
-      await ApiService.patch(`/jobs/${params.jobId}/status`, { status: "Completed" })
+      await ApiService.patch(`/jobs/${params.jobId}/release`, {})
       await ApiService.post(`/chat/${params.jobId}/messages`, {
         content: "💰 Payment has been released. Thank you for your great work!",
       }).catch(() => {})
-      setJobStatus("Completed")
+      setPaymentStatus("Released")
       toast.success("Payment released successfully!")
       fetchMessages()
+      fetchJobStatus()
     } catch {
       toast.error("Failed to release payment")
     } finally {
@@ -154,17 +181,76 @@ export default function ClientChatRoomPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Payment Release Card */}
-      {(jobStatus === "ClientConfirmed" || jobStatus === "Completed") && (
+      {/* Escrow Payment Button - shown when job is accepted but not yet escrowed */}
+      {paymentStatus === "Unpaid" && jobStatus !== "Pending" && jobStatus !== "Cancelled" && jobStatus !== "Declined" && (
+        <div className="px-4 py-3 border-t">
+          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-amber-600" />
+              <p className="font-semibold text-sm text-amber-700">Escrow Payment</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-amber-600">{jobTitle}</p>
+              <p className="font-bold text-amber-700">₱{jobPrice.toLocaleString()}</p>
+            </div>
+            <p className="text-xs text-amber-600/70 text-center">
+              Lock funds in escrow to secure the worker&apos;s service. Funds will be held until you release them.
+            </p>
+            <Button
+              className="w-full rounded-xl"
+              onClick={handleEscrowPayment}
+              disabled={escrowing}
+            >
+              {escrowing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Wallet className="h-4 w-4 mr-2" />
+              )}
+              {escrowing ? "Escrowing..." : `Escrow ₱${jobPrice.toLocaleString()}`}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Release Card - shown when escrowed and client confirmed */}
+      {paymentStatus === "Escrowed" && (jobStatus === "ClientConfirmed" || jobStatus === "Completed") && (
         <div className="px-4 py-3 border-t">
           <PaymentReleaseCard
             jobTitle={jobTitle}
-            amount={500}
+            amount={jobPrice}
             role="client"
-            released={jobStatus === "Completed"}
+            released={false}
             onRelease={handleReleasePayment}
             releasing={releasing}
           />
+        </div>
+      )}
+
+      {/* Payment Released Card */}
+      {paymentStatus === "Released" && (
+        <div className="px-4 py-3 border-t">
+          <PaymentReleaseCard
+            jobTitle={jobTitle}
+            amount={jobPrice}
+            role="client"
+            released={true}
+          />
+        </div>
+      )}
+
+      {/* Escrowed status indicator - shown when escrowed but work not yet confirmed */}
+      {paymentStatus === "Escrowed" && jobStatus !== "ClientConfirmed" && jobStatus !== "Completed" && (
+        <div className="px-4 py-3 border-t">
+          <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="h-4 w-4 text-blue-600" />
+              <p className="font-semibold text-sm text-blue-700">Payment Escrowed</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-blue-600">₱{jobPrice.toLocaleString()} locked</p>
+              <p className="text-xs text-blue-600/70">Waiting for work to be completed</p>
+            </div>
+          </div>
         </div>
       )}
 
