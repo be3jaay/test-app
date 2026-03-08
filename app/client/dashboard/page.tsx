@@ -22,10 +22,12 @@ import {
   Briefcase,
   Navigation,
   MapPin,
+  Camera,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { ChatbotVoiceAgent } from "@/components/chatbot-voice-agent"
+import { PhotoUploadCard } from "@/components/photo-upload-card"
 
 type Job = {
   _id: string
@@ -73,7 +75,7 @@ const clientStepIcons: Record<string, React.ComponentType<{ className?: string }
   Accepted: Briefcase,
   OnTheWay: Navigation,
   Arrived: MapPin,
-  InProgress: Loader2,
+  InProgress: Camera,
   ClientConfirmed: CheckCircle,
 }
 
@@ -88,6 +90,7 @@ export default function ClientDashboardPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [jobModalOpen, setJobModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [clientPhotos, setClientPhotos] = useState<Record<string, string>>({})
   const [chatbotOpen, setChatbotOpen] = useState(false)
   const [wakeStatus, setWakeStatus] = useState<'idle' | 'listening' | 'blocked' | 'unsupported'>('idle')
   const wakeRecognitionRef = useRef<any>(null)
@@ -213,9 +216,15 @@ export default function ClientDashboardPage() {
     setConfirming(true)
     try {
       await ApiService.patch(`/jobs/${selectedJob._id}/client-confirm`, {})
-      toast.success("Job confirmed as done!")
+      // Auto-send a chat message
+      await ApiService.post(`/chat/${selectedJob._id}/messages`, {
+        content: "✅ I've confirmed the work is done. Photos uploaded. Please review the payment details.",
+      }).catch(() => {}) // best-effort
+      toast.success("Job confirmed! Redirecting to chat...")
       setJobs((prev) => prev.map((j) => j._id === selectedJob._id ? { ...j, status: "ClientConfirmed" } : j))
       setSelectedJob((prev) => prev ? { ...prev, status: "ClientConfirmed" } : prev)
+      setJobModalOpen(false)
+      setTimeout(() => router.push(`/client/chats/${selectedJob._id}`), 500)
     } catch {
       toast.error("Failed to confirm job")
     } finally {
@@ -510,22 +519,40 @@ export default function ClientDashboardPage() {
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  {selectedJob.status === "InProgress" && (
+                {selectedJob.status === "InProgress" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <PhotoUploadCard
+                        label="Upload confirmation photo"
+                        preview={clientPhotos[selectedJob._id] || null}
+                        onPhotoSelect={(_file, url) =>
+                          setClientPhotos((prev) => ({ ...prev, [selectedJob._id]: url }))
+                        }
+                      />
+                      <PhotoUploadCard
+                        label="Worker proof of work"
+                        preview={null}
+                        waitingLabel="Waiting for worker..."
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Photos: {clientPhotos[selectedJob._id] ? "1" : "0"}/2 uploaded
+                    </p>
                     <Button
-                      className="flex-1 rounded-xl"
+                      className="w-full rounded-xl"
                       onClick={handleConfirmDone}
-                      disabled={confirming}
+                      disabled={confirming || !clientPhotos[selectedJob._id]}
                     >
                       {confirming ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : (
                         <CheckCircle className="h-4 w-4 mr-2" />
                       )}
-                      Confirm Done
+                      {clientPhotos[selectedJob._id] ? "Confirm Done" : "Upload photo to confirm"}
                     </Button>
-                  )}
-
+                  </div>
+                )}
+                <div className="flex gap-3 pt-2">
                   {selectedJob.status === "Pending" && (
                     <Button
                       variant="destructive"

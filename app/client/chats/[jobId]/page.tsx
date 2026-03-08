@@ -9,6 +9,8 @@ import { useParams, useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
 import { TokenStorage } from "@/services/token-storage"
 import { Loader2, ArrowLeft, Send } from "lucide-react"
+import { PaymentReleaseCard } from "@/components/payment-release-card"
+import { toast } from "sonner"
 
 type Message = {
   _id: string
@@ -26,6 +28,9 @@ export default function ClientChatRoomPage() {
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
+  const [jobStatus, setJobStatus] = useState<string>("")
+  const [jobTitle, setJobTitle] = useState<string>("")
+  const [releasing, setReleasing] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = () => {
@@ -36,10 +41,42 @@ export default function ClientChatRoomPage() {
       .finally(() => setLoading(false))
   }
 
+  const fetchJobStatus = () => {
+    if (!params.jobId) return
+    ApiService.get<{ status: string; title?: string; description?: string }>(`/jobs/${params.jobId}`)
+      .then((job) => {
+        setJobStatus(job.status)
+        setJobTitle(job.title || job.description || "Service")
+      })
+      .catch(() => {})
+  }
+
+  const handleReleasePayment = async () => {
+    if (!params.jobId) return
+    setReleasing(true)
+    try {
+      await ApiService.patch(`/jobs/${params.jobId}/status`, { status: "Completed" })
+      await ApiService.post(`/chat/${params.jobId}/messages`, {
+        content: "💰 Payment has been released. Thank you for your great work!",
+      }).catch(() => {})
+      setJobStatus("Completed")
+      toast.success("Payment released successfully!")
+      fetchMessages()
+    } catch {
+      toast.error("Failed to release payment")
+    } finally {
+      setReleasing(false)
+    }
+  }
+
   useEffect(() => {
     if (!isAuthenticated) return
     fetchMessages()
-    const interval = setInterval(fetchMessages, 5000)
+    fetchJobStatus()
+    const interval = setInterval(() => {
+      fetchMessages()
+      fetchJobStatus()
+    }, 5000)
     return () => clearInterval(interval)
   }, [isAuthenticated, params.jobId])
 
@@ -116,6 +153,20 @@ export default function ClientChatRoomPage() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Payment Release Card */}
+      {(jobStatus === "ClientConfirmed" || jobStatus === "Completed") && (
+        <div className="px-4 py-3 border-t">
+          <PaymentReleaseCard
+            jobTitle={jobTitle}
+            amount={500}
+            role="client"
+            released={jobStatus === "Completed"}
+            onRelease={handleReleasePayment}
+            releasing={releasing}
+          />
+        </div>
+      )}
 
       {/* Input */}
       <div className="px-4 py-3 border-t">

@@ -87,7 +87,6 @@ function BookingForm() {
       await ApiService.post("/jobs", {
         description: description.trim(),
         workerId: workerId,
-        price: 0,
       })
       setSubmitted(true)
       toast.success("Booking request sent!")
