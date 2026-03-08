@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import ApiService from "@/services/api-services"
 import { toast } from "sonner"
@@ -20,7 +20,9 @@ import {
   Navigation,
   Bell,
   XCircle,
+  Camera,
 } from "lucide-react"
+import { PhotoUploadCard } from "@/components/photo-upload-card"
 
 type Job = {
   _id: string
@@ -44,7 +46,7 @@ const stepIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   Accepted: Briefcase,
   OnTheWay: Navigation,
   Arrived: MapPin,
-  InProgress: Loader2,
+  InProgress: Camera,
   ClientConfirmed: CheckCircle,
 }
 
@@ -59,10 +61,34 @@ export default function WorkerDashboardPage() {
   const [accepting, setAccepting] = useState<string | null>(null)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<Job | null>(null)
+  const [workerPhotos, setWorkerPhotos] = useState<Record<string, string>>({})
+  const prevStatusesRef = useRef<Record<string, string>>({})
+  const autoRedirectedRef = useRef<Set<string>>(new Set())
 
   const fetchJobs = () => {
     ApiService.getArray<Job>("/jobs/worker")
       .then((all) => {
+        // Detect transition to ClientConfirmed and auto-redirect
+        all.forEach((job) => {
+          const prev = prevStatusesRef.current[job._id]
+          if (
+            job.status === "ClientConfirmed" &&
+            prev &&
+            prev !== "ClientConfirmed" &&
+            !autoRedirectedRef.current.has(job._id)
+          ) {
+            autoRedirectedRef.current.add(job._id)
+            ApiService.post(`/chat/${job._id}/messages`, {
+              content: "📸 Work completed! Photos have been submitted for your review.",
+            }).catch(() => {})
+            toast.success("Client confirmed! Redirecting to chat...", {
+              action: { label: "Open Chat", onClick: () => router.push(`/worker/chats/${job._id}`) },
+            })
+            setTimeout(() => router.push(`/worker/chats/${job._id}`), 1000)
+          }
+        })
+        prevStatusesRef.current = Object.fromEntries(all.map((j) => [j._id, j.status]))
+
         setJobs(all)
         const pending = all.filter((j) => j.status === "Pending")
         setPendingJobs(pending)
@@ -292,13 +318,40 @@ export default function WorkerDashboardPage() {
                       )
                     })}
                   </div>
+                  {/* Photo upload section for InProgress */}
+                  {job.status === "InProgress" && (
+                    <div className="space-y-3 mb-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <PhotoUploadCard
+                          label="Upload proof of work"
+                          preview={workerPhotos[job._id] || null}
+                          onPhotoSelect={(_file, url) =>
+                            setWorkerPhotos((prev) => ({ ...prev, [job._id]: url }))
+                          }
+                        />
+                        <PhotoUploadCard
+                          label="Client confirmation photo"
+                          preview={null}
+                          waitingLabel="Waiting for client..."
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        Photos: {workerPhotos[job._id] ? "1" : "0"}/2 uploaded
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center justify-end">
-                    {job.status === "InProgress" && (
+                    {job.status === "InProgress" && !workerPhotos[job._id] && (
                       <p className="text-xs text-muted-foreground mr-auto">
-                        Waiting for client to confirm...
+                        Upload a photo to proceed
                       </p>
                     )}
-                    {currentStep?.next && (
+                    {job.status === "InProgress" && workerPhotos[job._id] && (
+                      <p className="text-xs text-green-600 mr-auto">
+                        Photo uploaded — waiting for client
+                      </p>
+                    )}
+                    {currentStep?.next && job.status !== "InProgress" && (
                       <Button
                         size="sm"
                         className="rounded-lg text-xs h-8"
